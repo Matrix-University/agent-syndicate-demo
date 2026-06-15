@@ -1,4 +1,85 @@
-# Agent Syndicate
+# Agent Syndicate — Three.js prototype
+
+A third-person seed for the brawler demo: a movable character with an animation
+state machine, a follow camera, and a blockout arena. The character is a
+placeholder built from primitives so the project runs with zero external assets;
+swap it for a Mixamo model when you're ready (see below).
+
+## Run it
+
+Requires [Node.js](https://nodejs.org) (18+).
+
+```bash
+npm install
+npm run dev
+```
+
+Vite opens `http://localhost:5173`. Move with **WASD / arrow keys**, **Shift** to
+sprint. The character turns to face its direction of travel and switches between
+idle and run animations.
+
+`npm run build` produces a static `dist/` you can host anywhere — that's how
+you'll share the playable demo as a link later.
+
+## Project structure
+
+```
+index.html              canvas + HUD, loads src/main.js
+src/main.js             boots the Game
+src/Game.js             renderer, scene, camera, the update loop
+src/World.js            lights, floor, grid, blockout pillars
+src/Player.js           the character: rig, movement, animation state machine
+src/ThirdPersonCamera.js smooth follow camera
+src/Input.js            keyboard state + movement axes
+```
+
+The important architecture choice: `Player.root` is the thing that moves through
+the world (the camera follows it), and `Player.rig` is the visible body. Keeping
+them separate means you replace the *visuals* without touching the *movement*.
+
+## Swapping in a Mixamo character
+
+1. Grab a character + animations from [mixamo.com](https://www.mixamo.com) (free
+   with an Adobe account). Download the rigged character, then download the
+   **Idle** and **Running** animations for it ("Without Skin" once you have the
+   base model). Mixamo exports `.fbx`.
+2. Easiest path: open the model in [Blender](https://www.blender.org), import the
+   animation clips onto it, and export a single `.glb`. Put it in `public/models/`.
+3. In `Player.js`, replace `_buildPlaceholderRig()` with a GLTF load and drive an
+   `AnimationMixer` from the state machine. Sketch:
+
+   ```js
+   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+   async _loadCharacter() {
+     const gltf = await new GLTFLoader().loadAsync('/models/agent.glb');
+     this.rig.add(gltf.scene);
+     this.mixer = new THREE.AnimationMixer(gltf.scene);
+     this.clips = {
+       idle: this.mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, 'Idle')),
+       run:  this.mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, 'Run')),
+     };
+     this.clips.idle.play();
+   }
+   ```
+
+   Then in `_animate()`, crossfade clips on state change and call
+   `this.mixer.update(dt)` each frame instead of rotating limbs by hand. The
+   movement code in `update()` stays exactly the same.
+
+## Where this goes next (the roadmap)
+
+1. ✅ Move a character around an arena (this seed).
+2. Add a punch: an `ATTACK` state, an attack animation, and hit detection.
+3. One dummy enemy that takes damage and explodes into green code (a particle
+   burst on death).
+4. A crowd of enemies that encircle you, with an "attack slot" limiter so only
+   one or two strike at a time.
+5. Pole pickup + an alternate moveset.
+6. The fuse/split state machine: Hulk combat mode <-> invulnerable, regenerating
+   twins mode.
+
+## Agent Syndicate (seed idea)
 
 Agent Syndicate Burly Brawl Game Demo
 The Cliff Notes (Short Version) Re-skin the Burly Brawl Scene from Path of Neo (ps2). Playable game built with unreal engine.

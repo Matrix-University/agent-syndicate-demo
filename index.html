@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Syndicate — Prototype</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0a0f; }
+      #app { width: 100vw; height: 100vh; display: block; }
+      #hud {
+        position: fixed; top: 14px; left: 16px;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        color: #39ff14; font-size: 13px; line-height: 1.6;
+        text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+        pointer-events: none; user-select: none;
+      }
+      #hud b { letter-spacing: 2px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="app"></canvas>
+    <div id="hud">
+      <b>AGENT SYNDICATE</b> // prototype 0.1<br />
+      WASD / Arrows — move &nbsp;·&nbsp; Shift — sprint
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
