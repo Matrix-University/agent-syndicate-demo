@@ -18,7 +18,7 @@ export class Game {
     );
     this.camera.position.set(0, 7, -11);
 
-    buildWorld(this.scene);
+    this.world = buildWorld(this.scene);
 
     // Single baked asset shared with Decentraland: character + embedded clips in
     // one Draco-compressed GLB (produced by `npm run bake:anims:dcl`). The browser
@@ -32,7 +32,7 @@ export class Game {
     });
     this.scene.add(this.player.root);
 
-    this.followCam = new ThirdPersonCamera(this.camera, this.player.root);
+    this.followCam = new ThirdPersonCamera(this.camera, this.player.root, canvas);
     this.input = new Input();
     this.clock = new THREE.Clock();
 
@@ -47,7 +47,7 @@ export class Game {
   _loop() {
     // Clamp dt so a paused/backgrounded tab doesn't teleport the player.
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    this.player.update(dt, this.input, this.camera);
+    this.player.update(dt, this.input, this.camera, this.world);
     this.followCam.update(dt);
     this.renderer.render(this.scene, this.camera);
     this.input.endFrame(); // clear edge-triggered input after everyone has read it

@@ -27,9 +27,15 @@ export class Player {
     this.modelYaw = opts.modelYaw ?? 0;      // set Math.PI if the model faces -Z
 
     this.speedWalk = 6;
-    this.speedSprint = 11;
+    this.speedSprint = 16.5;
     this.turnSpeed = 9; // higher = snappier turning toward movement direction
-    this.velocity = new THREE.Vector3();
+    this.velocity = new THREE.Vector3(); // horizontal only; vertical is velocityY
+
+    // Horizontal momentum: ease velocity toward the target so starts/stops have
+    // weight. decel > accel makes stopping feel crisp without being instant.
+    this.accel = 12;
+    this.decel = 16;
+    this.collisionRadius = 0.7; // circle used against world colliders
 
     // Vertical movement (jump). Floor is y = 0; airtime ≈ 2·jumpSpeed/gravity.
     this.gravity = 26;
@@ -43,6 +49,7 @@ export class Player {
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._move = new THREE.Vector3();
+    this._targetVel = new THREE.Vector3();
     this._up = new THREE.Vector3(0, 1, 0);
 
     this.anim = null; // AnimationController, set once a model loads
@@ -155,7 +162,7 @@ export class Player {
   }
 
   // ---------------------------------------------------------------------------
-  update(dt, input, camera) {
+  update(dt, input, camera, world) {
     // Movement basis: camera forward & right, flattened onto the ground plane.
     camera.getWorldDirection(this._forward);
     this._forward.y = 0;
@@ -172,8 +179,15 @@ export class Player {
     // Horizontal movement — rooted while a blocking action (punch) plays.
     const rooted = this.anim ? this.anim.acting : false;
     const speed = input.sprint ? this.speedSprint : this.speedWalk;
-    this.velocity.copy(this._move).multiplyScalar(moving && !rooted ? speed : 0);
-    this.root.position.addScaledVector(this.velocity, dt);
+
+    // Ease velocity toward the target instead of snapping, for accel/decel weight.
+    const active = moving && !rooted;
+    this._targetVel.copy(this._move).multiplyScalar(active ? speed : 0);
+    const k = 1 - Math.exp(-(active ? this.accel : this.decel) * dt);
+    this.velocity.x += (this._targetVel.x - this.velocity.x) * k;
+    this.velocity.z += (this._targetVel.z - this.velocity.z) * k;
+    this.root.position.x += this.velocity.x * dt;
+    this.root.position.z += this.velocity.z * dt;
 
     // Vertical movement: jump impulse + gravity, floor at y = 0. Jump from the
     // ground only and not mid-action; `jumpPressed` is already edge-detected.
@@ -191,6 +205,17 @@ export class Player {
       this.velocityY = 0;
       if (!this.grounded) justLanded = true;
       this.grounded = true;
+    }
+
+    // Resolve against arena geometry (pillars + bounds). Horizontal only, so the
+    // jump arc is untouched. Zero out velocity into a surface so we don't keep
+    // pushing (and stick) against it.
+    if (world) {
+      const px = this.root.position.x;
+      const pz = this.root.position.z;
+      world.collide(this.root.position, this.collisionRadius);
+      if (this.root.position.x !== px) this.velocity.x = 0;
+      if (this.root.position.z !== pz) this.velocity.z = 0;
     }
 
     // Face the direction of travel.
