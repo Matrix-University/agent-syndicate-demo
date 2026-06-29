@@ -20,7 +20,16 @@ export class Game {
 
     buildWorld(this.scene);
 
-    this.player = new Player();
+    // Single baked asset shared with Decentraland: character + embedded clips in
+    // one Draco-compressed GLB (produced by `npm run bake:anims:dcl`). The browser
+    // decodes it via DRACOLoader; DCL loads the same file. Until it exists, the
+    // primitive placeholder shows. Tune modelScale so the body is ~3 units tall,
+    // and set modelYaw to Math.PI if it faces away.
+    this.player = new Player({
+      modelUrl: '/models/agent-dcl.glb',
+      modelScale: 1.7,
+      modelYaw: 0,
+    });
     this.scene.add(this.player.root);
 
     this.followCam = new ThirdPersonCamera(this.camera, this.player.root);
@@ -41,11 +50,14 @@ export class Game {
     this.player.update(dt, this.input, this.camera);
     this.followCam.update(dt);
     this.renderer.render(this.scene, this.camera);
+    this.input.endFrame(); // clear edge-triggered input after everyone has read it
   }
 
   _onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // Re-apply in case the window moved to a display with a different DPI.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   }
 }

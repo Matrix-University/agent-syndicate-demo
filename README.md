@@ -15,8 +15,8 @@ npm run dev
 ```
 
 Vite opens `http://localhost:5173`. Move with **WASD / arrow keys**, **Shift** to
-sprint. The character turns to face its direction of travel and switches between
-idle and run animations.
+sprint, **J** to punch, **Space** to jump. The character turns to face its direction
+of travel and switches between idle, walk/run, and one-shot action animations.
 
 `npm run build` produces a static `dist/` you can host anywhere — that's how
 you'll share the playable demo as a link later.
@@ -37,35 +37,26 @@ The important architecture choice: `Player.root` is the thing that moves through
 the world (the camera follows it), and `Player.rig` is the visible body. Keeping
 them separate means you replace the *visuals* without touching the *movement*.
 
-## Swapping in a Mixamo character
+## Swapping in a real character
 
-1. Grab a character + animations from [mixamo.com](https://www.mixamo.com) (free
-   with an Adobe account). Download the rigged character, then download the
-   **Idle** and **Running** animations for it ("Without Skin" once you have the
-   base model). Mixamo exports `.fbx`.
-2. Easiest path: open the model in [Blender](https://www.blender.org), import the
-   animation clips onto it, and export a single `.glb`. Put it in `public/models/`.
-3. In `Player.js`, replace `_buildPlaceholderRig()` with a GLTF load and drive an
-   `AnimationMixer` from the state machine. Sketch:
+The GLTF loader is already wired up. `Player` loads a rigged `.glb`, binds its
+clips to the animation state machine via a `THREE.AnimationMixer`, and crossfades
+on state change. **No model is required** — without one, the primitive placeholder
+shows, so the project always runs.
 
-   ```js
-   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+To use a real character:
 
-   async _loadCharacter() {
-     const gltf = await new GLTFLoader().loadAsync('/models/agent.glb');
-     this.rig.add(gltf.scene);
-     this.mixer = new THREE.AnimationMixer(gltf.scene);
-     this.clips = {
-       idle: this.mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, 'Idle')),
-       run:  this.mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, 'Run')),
-     };
-     this.clips.idle.play();
-   }
-   ```
+1. Drop a rigged `.glb` (with Idle + Run clips) at **`public/models/agent.glb`**.
+   See [public/models/README.md](public/models/README.md) for sources — the
+   recommended one is [Quaternius](https://quaternius.com) (**CC0**, public domain,
+   GLB-ready, suited figures that read well as Agents).
+2. Run `npm run dev`. The character idles, then runs while you move.
+3. Tune in [src/Game.js](src/Game.js): `modelScale` (so the body is ~3 units tall)
+   and `modelYaw` (`Math.PI` if it faces the camera when moving forward).
 
-   Then in `_animate()`, crossfade clips on state change and call
-   `this.mixer.update(dt)` each frame instead of rotating limbs by hand. The
-   movement code in `update()` stays exactly the same.
+Clips bind by case-insensitive name match (`CLIP_NAMES` in `Player.js`); the
+movement code in `update()` is untouched. **Mixamo** also works — it exports
+`.fbx`, so convert to `.glb` in [Blender](https://www.blender.org) first.
 
 ## Where this goes next (the roadmap)
 
