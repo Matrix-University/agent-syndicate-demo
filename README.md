@@ -91,3 +91,9 @@ One tricky game play detail, I'd want the player to be able to combine the twins
 _You can see the Twins here:_
 
 https://agentsyndicate.online/
+
+So let's say scene 1 is the Twins in Hel club, Agent Lewis instructs them to run into each other, they combine and transform into Hulk mode. Agent Lewis tells them they're flagged as exiles and that they need to draw the system Agents away from the club. Scene 2, the Hulk version gets attacked by system Agents in the parking garage of Hel club, mission one is to fight your way out of the parking garage to a hardline. Get to the handline and that's a check point. Scene 3, hardline takes you to Debir court where the Hulk version is attacked by more Agents. After defeating some kind of boss Agent, or specific number of Agents or survive long enough & Agent Lewis calls and gives them instructions on how to separate back into twins. Once they split she tells them to return to Hel club undetected.
+
+That's just a rough game play flow.
+
+Game demo visible [here](https://agent-syndicate-demo.vercel.app/)
