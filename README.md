@@ -67,8 +67,12 @@ movement code in `update()` is untouched. **Mixamo** also works — it exports
 4. A crowd of enemies that encircle you, with an "attack slot" limiter so only
    one or two strike at a time.
 5. Pole pickup + an alternate moveset.
-6. The fuse/split state machine: Hulk combat mode <-> invulnerable, regenerating
-   twins mode.
+6. The fuse/split state machine: Hulk combat mode <-> invulnerable, regenerating twins mode.
+
+## Game Scenes
+
+- Parking garage (animated)
+- Debir Court (game play)
 
 ## Agent Syndicate (seed idea)
 
