@@ -176,6 +176,10 @@ export class Player {
     const moving = this._move.lengthSq() > 1e-4;
     if (moving) this._move.normalize();
 
+    // Give jump priority when both one-shot inputs arrive on the same frame.
+    const wantsJump = input.jumpPressed && this.grounded;
+    if (this.anim && input.punchPressed && !wantsJump) this.anim.playAction('punch');
+
     // Horizontal movement — rooted while a blocking action (punch) plays.
     const rooted = this.anim ? this.anim.acting : false;
     const speed = input.sprint ? this.speedSprint : this.speedWalk;
@@ -183,9 +187,13 @@ export class Player {
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
     const active = moving && !rooted;
     this._targetVel.copy(this._move).multiplyScalar(active ? speed : 0);
-    const k = 1 - Math.exp(-(active ? this.accel : this.decel) * dt);
-    this.velocity.x += (this._targetVel.x - this.velocity.x) * k;
-    this.velocity.z += (this._targetVel.z - this.velocity.z) * k;
+    if (rooted) {
+      this.velocity.set(0, 0, 0);
+    } else {
+      const k = 1 - Math.exp(-(active ? this.accel : this.decel) * dt);
+      this.velocity.x += (this._targetVel.x - this.velocity.x) * k;
+      this.velocity.z += (this._targetVel.z - this.velocity.z) * k;
+    }
     this.root.position.x += this.velocity.x * dt;
     this.root.position.z += this.velocity.z * dt;
 
@@ -224,17 +232,19 @@ export class Player {
       this.root.rotation.y = dampAngle(this.root.rotation.y, targetYaw, this.turnSpeed, dt);
     }
 
-    this.state = moving ? (input.sprint ? STATE.RUN : STATE.WALK) : STATE.IDLE;
+    const horizontalSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+    const locomoting = horizontalSpeed > 0.1;
+    const running = horizontalSpeed > this.speedWalk * 1.35;
+    this.state = locomoting ? (running ? STATE.RUN : STATE.WALK) : STATE.IDLE;
 
     if (this.anim) {
       if (justTookOff) this.anim.jumpTakeoff();
       else if (justLanded) this.anim.jumpLand();
-      if (input.punchPressed) this.anim.playAction('punch');
       // setLocomotion is a no-op while the controller is airborne/acting.
-      this.anim.setLocomotion(this.state, speed / this.speedWalk);
+      this.anim.setLocomotion(this.state, horizontalSpeed / this.speedWalk);
       this.anim.update(dt);
     } else {
-      this._animate(dt, moving ? (input.sprint ? 1.6 : 1.0) : 0);
+      this._animate(dt, locomoting ? (running ? 1.6 : 1.0) : 0);
     }
   }
 
