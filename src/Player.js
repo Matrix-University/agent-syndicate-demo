@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { AnimationController, STATE } from './AnimationController.js';
 
+const MOVEMENT_EPSILON = 0.01;
+
 // The playable character.
 //   root  -> moves through the world (this is what the camera follows)
 //   rig   -> the visible body; a Quaternius CC0 GLB when present, else primitives
@@ -53,6 +55,8 @@ export class Player {
     this._up = new THREE.Vector3(0, 1, 0);
 
     this.anim = null; // AnimationController, set once a model loads
+    this.model = null;
+    this._disposed = false;
 
     this._buildPlaceholderRig();
     if (this.modelUrl) this._loadCharacter();
@@ -114,51 +118,59 @@ export class Player {
     const draco = new DRACOLoader().setDecoderPath('/draco/');
     loader.setDRACOLoader(draco);
 
-    let gltf;
+    let gltf = null;
     try {
       gltf = await loader.loadAsync(this.modelUrl);
     } catch (err) {
       console.warn(`Player: could not load "${this.modelUrl}", using placeholder.`, err);
-      draco.dispose();
-      return;
     }
 
-    const model = gltf.scene;
-    model.scale.setScalar(this.modelScale);
-    model.rotation.y = this.modelYaw;
-    model.traverse((o) => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-    });
+    let model = null;
+    let clips = [];
+    if (gltf && !this._disposed) {
+      model = gltf.scene;
+      clips = gltf.animations;
+      model.scale.setScalar(this.modelScale);
+      model.rotation.y = this.modelYaw;
+      model.traverse((o) => {
+        if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+      });
 
-    // Clips: prefer an external library on the same rig; otherwise use whatever is
-    // embedded. Library clips bind to this model's skeleton by bone name.
-    let clips = gltf.animations;
-    if (this.animationUrl) {
-      try {
-        const lib = await loader.loadAsync(this.animationUrl);
-        if (lib.animations.length) clips = lib.animations;
-      } catch (err) {
-        console.warn(`Player: could not load animation library "${this.animationUrl}".`, err);
+      // Clips: prefer an external library on the same rig; otherwise use whatever is
+      // embedded. Library clips bind to this model's skeleton by bone name.
+      if (this.animationUrl) {
+        try {
+          const lib = await loader.loadAsync(this.animationUrl);
+          if (lib.animations.length) clips = lib.animations;
+          disposeObject(lib.scene);
+        } catch (err) {
+          console.warn(`Player: could not load animation library "${this.animationUrl}".`, err);
+        }
       }
     }
     draco.dispose(); // decoding done — free the Draco worker pool
 
-    // Swap the visible body: drop the primitives, mount the model.
-    this.rig.remove(this.placeholder);
-    disposeObject(this.placeholder);
-    this.placeholder = null;
-    this.torso = this.armL = this.armR = this.legL = this.legR = null;
-    this.rig.add(model);
+    if (model && !this._disposed) {
+      // Swap the visible body: drop the primitives, mount the model.
+      this.rig.remove(this.placeholder);
+      disposeObject(this.placeholder);
+      this.placeholder = null;
+      this.torso = this.armL = this.armR = this.legL = this.legR = null;
+      this.rig.add(model);
+      this.model = model;
 
-    if (!clips.length) {
-      console.warn(
-        `Player: "${this.modelUrl}" is rigged but has no animation clips — the ` +
-        `character will stand still. Provide an animationUrl on the same rig, or ` +
-        `export the GLB with Idle/Walk/Run clips embedded (see public/models/README.md).`
-      );
+      if (!clips.length) {
+        console.warn(
+          `Player: "${this.modelUrl}" is rigged but has no animation clips — the ` +
+          `character will stand still. Provide an animationUrl on the same rig, or ` +
+          `export the GLB with Idle/Walk/Run clips embedded (see public/models/README.md).`
+        );
+      }
+
+      this.anim = new AnimationController(model, clips);
+    } else if (gltf) {
+      disposeObject(gltf.scene);
     }
-
-    this.anim = new AnimationController(model, clips);
   }
 
   // ---------------------------------------------------------------------------
@@ -173,7 +185,8 @@ export class Player {
     this._move.addScaledVector(this._forward, input.moveZ);
     this._move.addScaledVector(this._right, input.moveX);
 
-    const moving = this._move.lengthSq() > 1e-4;
+    const movementMagnitude = Math.min(this._move.length(), 1);
+    const moving = movementMagnitude > MOVEMENT_EPSILON;
     if (moving) this._move.normalize();
 
     // Give jump priority when both one-shot inputs arrive on the same frame.
@@ -186,7 +199,7 @@ export class Player {
 
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
     const active = moving && !rooted;
-    this._targetVel.copy(this._move).multiplyScalar(active ? speed : 0);
+    this._targetVel.copy(this._move).multiplyScalar(active ? speed * movementMagnitude : 0);
     if (rooted) {
       this.velocity.set(0, 0, 0);
     } else {
@@ -249,8 +262,11 @@ export class Player {
   }
 
   dispose() {
+    this._disposed = true;
     this.anim?.dispose();
     if (this.placeholder) disposeObject(this.placeholder);
+    if (this.model) disposeObject(this.model);
+    this.root.removeFromParent();
   }
 
   // Procedural stand-in used only while the placeholder rig is showing (no GLB,
@@ -289,10 +305,20 @@ function dampAngle(current, target, speed, dt) {
 function disposeObject(obj) {
   const geometries = new Set();
   const materials = new Set();
+  const textures = new Set();
   obj.traverse((o) => {
     if (o.geometry) geometries.add(o.geometry);
-    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => materials.add(m));
+    if (o.skeleton?.boneTexture) textures.add(o.skeleton.boneTexture);
+    if (o.material) {
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach((material) => {
+        materials.add(material);
+        Object.values(material).forEach((value) => {
+          if (value?.isTexture) textures.add(value);
+        });
+      });
+    }
   });
   geometries.forEach((g) => g.dispose());
   materials.forEach((m) => m.dispose());
+  textures.forEach((texture) => texture.dispose());
 }

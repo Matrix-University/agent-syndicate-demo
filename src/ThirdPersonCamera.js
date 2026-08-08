@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+const TOUCH_CAMERA_ZONE_START = 0.45;
+
 // Third-person orbit camera. The mouse (pointer-lock) drives yaw/pitch around the
 // player; the rig trails at a fixed distance while the player turns to face its
 // own direction of travel independently. Movement basis still comes from
@@ -22,10 +24,14 @@ export class ThirdPersonCamera {
     this._desired = new THREE.Vector3();
     this._look = new THREE.Vector3();
     this._offset = new THREE.Vector3();
+    this._cameraPointerId = null;
+    this._lastPointerX = 0;
+    this._lastPointerY = 0;
+    this._lastCanvasPointerType = null;
 
     // Pointer lock: click the canvas to capture the mouse, Esc to release.
     this._onClick = () => {
-      if (document.pointerLockElement !== domElement) {
+      if (this._lastCanvasPointerType === 'mouse' && document.pointerLockElement !== domElement) {
         const p = domElement.requestPointerLock();
         if (p && p.catch) p.catch(() => {}); // some browsers return a promise
       }
@@ -37,8 +43,46 @@ export class ThirdPersonCamera {
         this.pitch + e.movementY * this.sensitivity, this.minPitch, this.maxPitch
       );
     };
+    this._onPointerDown = (event) => {
+      this._lastCanvasPointerType = event.pointerType;
+      const isTouchOrbit = (event.pointerType === 'touch' || event.pointerType === 'pen') &&
+        event.target === domElement &&
+        event.clientX >= domElement.clientWidth * TOUCH_CAMERA_ZONE_START;
+
+      if (isTouchOrbit && this._cameraPointerId === null) {
+        this._cameraPointerId = event.pointerId;
+        this._lastPointerX = event.clientX;
+        this._lastPointerY = event.clientY;
+        domElement.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }
+    };
+    this._onPointerMove = (event) => {
+      if (event.pointerId === this._cameraPointerId) {
+        const movementX = event.clientX - this._lastPointerX;
+        const movementY = event.clientY - this._lastPointerY;
+        this._lastPointerX = event.clientX;
+        this._lastPointerY = event.clientY;
+        this.yaw -= movementX * this.sensitivity;
+        this.pitch = THREE.MathUtils.clamp(
+          this.pitch + movementY * this.sensitivity, this.minPitch, this.maxPitch
+        );
+        event.preventDefault();
+      }
+    };
+    this._onPointerEnd = (event) => {
+      if (event.pointerId === this._cameraPointerId) this._cameraPointerId = null;
+    };
+    this._onBlur = () => { this._cameraPointerId = null; };
+
     domElement.addEventListener('click', this._onClick);
+    domElement.addEventListener('pointerdown', this._onPointerDown);
+    domElement.addEventListener('pointermove', this._onPointerMove);
+    domElement.addEventListener('pointerup', this._onPointerEnd);
+    domElement.addEventListener('pointercancel', this._onPointerEnd);
+    domElement.addEventListener('lostpointercapture', this._onPointerEnd);
     document.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('blur', this._onBlur);
   }
 
   update(dt) {
@@ -59,6 +103,13 @@ export class ThirdPersonCamera {
 
   dispose() {
     this.domElement.removeEventListener('click', this._onClick);
+    this.domElement.removeEventListener('pointerdown', this._onPointerDown);
+    this.domElement.removeEventListener('pointermove', this._onPointerMove);
+    this.domElement.removeEventListener('pointerup', this._onPointerEnd);
+    this.domElement.removeEventListener('pointercancel', this._onPointerEnd);
+    this.domElement.removeEventListener('lostpointercapture', this._onPointerEnd);
     document.removeEventListener('mousemove', this._onMouseMove);
+    window.removeEventListener('blur', this._onBlur);
+    this._cameraPointerId = null;
   }
 }

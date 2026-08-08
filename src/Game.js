@@ -3,6 +3,7 @@ import { buildWorld } from './World.js';
 import { Player } from './Player.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
 import { Input } from './Input.js';
+import { MobileControls } from './MobileControls.js';
 
 export class Game {
   constructor(canvas) {
@@ -30,14 +31,25 @@ export class Game {
       modelScale: 1.7,
       modelYaw: 0,
     });
+    this.player.root.position.set(0, 0, -42);
     this.scene.add(this.player.root);
 
-    this.followCam = new ThirdPersonCamera(this.camera, this.player.root, canvas);
     this.input = new Input();
+    this.followCam = new ThirdPersonCamera(this.camera, this.player.root, canvas);
+    this.mobileControls = new MobileControls(this.input, {
+      root: document.getElementById('mobile-controls'),
+      joystick: document.getElementById('move-stick'),
+      thumb: document.getElementById('move-stick-thumb'),
+      jumpButton: document.getElementById('jump-button'),
+      punchButton: document.getElementById('punch-button'),
+    });
     this.clock = new THREE.Clock();
+    this._disposed = false;
 
-    window.addEventListener('resize', () => this._onResize());
     this._loop = this._loop.bind(this);
+    this._onResize = this._onResize.bind(this);
+    window.addEventListener('resize', this._onResize);
+    window.visualViewport?.addEventListener('resize', this._onResize);
   }
 
   start() {
@@ -54,10 +66,27 @@ export class Game {
   }
 
   _onResize() {
+    this.mobileControls.reset();
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     // Re-apply in case the window moved to a display with a different DPI.
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  }
+
+  dispose() {
+    if (!this._disposed) {
+      this._disposed = true;
+      this.renderer.setAnimationLoop(null);
+      window.removeEventListener('resize', this._onResize);
+      window.visualViewport?.removeEventListener('resize', this._onResize);
+      this.mobileControls.dispose();
+      this.input.dispose();
+      this.followCam.dispose();
+      this.player.dispose();
+      this.world.dispose();
+      this.scene.clear();
+      this.renderer.dispose();
+    }
   }
 }

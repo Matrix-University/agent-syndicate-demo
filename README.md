@@ -15,6 +15,22 @@ Vite opens `http://localhost:5173`. Move with **WASD / arrow keys**, **Shift** t
 sprint, **J** to punch, **Space** to jump. The character turns to face its direction
 of travel and switches between idle, walk/run, and one-shot action animations.
 
+On a touch device, use the **left stick** for camera-relative movement. Push it to
+the outer ring to sprint, drag open space on the right side to orbit the camera,
+and use the separate **JUMP** and **HIT** buttons for actions. Keyboard and mouse
+controls remain available on hybrid devices.
+
+The HUD automatically shows the desktop or touch control mapping based on the
+detected pointer. Its **KEYS / TOUCH** button can switch the displayed mapping for
+the current page without disabling any keyboard, mouse, or touch controls.
+
+To test on a phone connected to the same local network, expose the Vite server and
+open the printed network URL on the device:
+
+```bash
+npm run dev -- --host
+```
+
 `npm run build` produces a static `dist/` you can host anywhere — that's how
 you'll share the playable demo as a link later.
 
@@ -27,7 +43,8 @@ src/Game.js             renderer, scene, camera, the update loop
 src/World.js            lights, floor, grid, blockout pillars
 src/Player.js           the character: rig, movement, animation state machine
 src/ThirdPersonCamera.js smooth follow camera
-src/Input.js            keyboard state + movement axes
+src/Input.js            keyboard + mobile gameplay input contract
+src/MobileControls.js   touch joystick and action-button adapter
 ```
 
 The important architecture choice: `Player.root` is the thing that moves through

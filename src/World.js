@@ -11,8 +11,10 @@ const CAR_MODELS = [
 
 // Resolves the player against static garage geometry as a circle on the ground.
 export class World {
-  constructor(colliders) {
+  constructor(root, colliders) {
+    this.root = root;
     this.colliders = colliders;
+    this.disposed = false;
   }
 
   collide(pos, radius) {
@@ -56,6 +58,15 @@ export class World {
       pos.z, -GARAGE_HALF_DEPTH + radius, GARAGE_HALF_DEPTH - radius
     );
   }
+
+  dispose() {
+    if (!this.disposed) {
+      this.disposed = true;
+      this.root.removeFromParent();
+      disposeObject(this.root);
+      this.root.clear();
+    }
+  }
 }
 
 function addParkingLines(scene, material) {
@@ -84,31 +95,35 @@ function addParkingLines(scene, material) {
   }
 }
 
-async function addParkedCars(scene, slots) {
+async function addParkedCars(scene, slots, world) {
   const loader = new GLTFLoader();
 
   try {
     const models = await Promise.all(CAR_MODELS.map((url) => loader.loadAsync(url)));
-    slots.forEach(([x, z], index) => {
-      const car = models[(index * 2 + 1) % models.length].scene.clone(true);
-      car.scale.setScalar(1.65);
-      car.traverse((object) => {
-        if (object.isMesh) {
-          object.castShadow = true;
-          object.receiveShadow = true;
-        }
+    if (world.disposed) {
+      models.forEach((model) => disposeObject(model.scene));
+    } else {
+      slots.forEach(([x, z], index) => {
+        const car = models[(index * 2 + 1) % models.length].scene.clone(true);
+        car.scale.setScalar(1.65);
+        car.traverse((object) => {
+          if (object.isMesh) {
+            object.castShadow = true;
+            object.receiveShadow = true;
+          }
+        });
+
+        const bounds = new THREE.Box3().setFromObject(car);
+        const center = bounds.getCenter(new THREE.Vector3());
+        car.position.set(-center.x, -bounds.min.y, -center.z);
+
+        const parkingSpot = new THREE.Group();
+        parkingSpot.position.set(x, 0, z);
+        parkingSpot.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+        parkingSpot.add(car);
+        scene.add(parkingSpot);
       });
-
-      const bounds = new THREE.Box3().setFromObject(car);
-      const center = bounds.getCenter(new THREE.Vector3());
-      car.position.set(-center.x, -bounds.min.y, -center.z);
-
-      const parkingSpot = new THREE.Group();
-      parkingSpot.position.set(x, 0, z);
-      parkingSpot.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
-      parkingSpot.add(car);
-      scene.add(parkingSpot);
-    });
+    }
   } catch (error) {
     console.warn('World: could not load parked vehicle models.', error);
   }
@@ -125,10 +140,18 @@ function makeSign(text, width, height, background, foreground) {
   context.lineWidth = 12;
   context.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
   context.fillStyle = foreground;
-  context.font = '700 150px Arial';
+  const maxTextWidth = canvas.width - 64;
+  const maxTextHeight = canvas.height - 40;
+  let fontSize = Math.min(150, maxTextHeight);
+  context.font = `700 ${fontSize}px Arial`;
+  const measuredWidth = context.measureText(text).width;
+  if (measuredWidth > maxTextWidth) {
+    fontSize *= maxTextWidth / measuredWidth;
+    context.font = `700 ${fontSize}px Arial`;
+  }
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText(text, canvas.width / 2, canvas.height / 2 + 5);
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -142,6 +165,10 @@ function makeSign(text, width, height, background, foreground) {
 export function buildWorld(scene) {
   scene.background = new THREE.Color(0x090b0a);
   scene.fog = new THREE.Fog(0x111713, 30, 92);
+  const root = new THREE.Group();
+  root.name = 'world';
+  scene.add(root);
+  scene = root;
 
   const concreteMaterial = new THREE.MeshStandardMaterial({
     color: 0x777b75, roughness: 0.94, metalness: 0.02,
@@ -317,7 +344,8 @@ export function buildWorld(scene) {
   parkedCars.forEach(([x, z]) => {
     colliders.push({ x, z, hx: 2.3, hz: 1.45 });
   });
-  addParkedCars(scene, parkedCars);
+  const world = new World(root, colliders);
+  addParkedCars(scene, parkedCars, world);
 
   for (const x of [-14, 14]) {
     const sign = makeSign('B2', 3.6, 1.7, '#173e31', '#f2f5ed');
@@ -367,5 +395,28 @@ export function buildWorld(scene) {
   exitDoor.position.set(-27.5, 0, 53.86);
   scene.add(exitDoor);
 
-  return new World(colliders);
+  return world;
+}
+
+function disposeObject(object) {
+  const geometries = new Set();
+  const materials = new Set();
+  const textures = new Set();
+
+  object.traverse((child) => {
+    if (child.geometry) geometries.add(child.geometry);
+    if (child.material) {
+      const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
+      childMaterials.forEach((material) => {
+        materials.add(material);
+        Object.values(material).forEach((value) => {
+          if (value?.isTexture) textures.add(value);
+        });
+      });
+    }
+  });
+
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((material) => material.dispose());
+  textures.forEach((texture) => texture.dispose());
 }

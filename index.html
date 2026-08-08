@@ -2,27 +2,174 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Agent Syndicate — Prototype</title>
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0a0f; }
-      #app { width: 100vw; height: 100vh; display: block; }
+      :root {
+        --matrix-green: #39ff14;
+        --control-edge: rgba(183, 255, 171, 0.72);
+        --control-fill: rgba(8, 16, 12, 0.7);
+      }
+      html, body {
+        margin: 0; height: 100%; overflow: hidden; background: #0a0a0f;
+        overscroll-behavior: none;
+      }
+      body { font-family: "Arial Narrow", "Roboto Condensed", sans-serif; }
+      #app { width: 100vw; height: 100vh; display: block; touch-action: none; }
       #hud {
-        position: fixed; top: 14px; left: 16px;
+        position: fixed;
+        top: max(14px, env(safe-area-inset-top));
+        left: max(16px, env(safe-area-inset-left));
+        right: max(16px, env(safe-area-inset-right));
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        color: #39ff14; font-size: 13px; line-height: 1.6;
+        color: var(--matrix-green); font-size: 13px; line-height: 1.6;
         text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
         pointer-events: none; user-select: none;
       }
       #hud b { letter-spacing: 2px; }
+      #hud-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+      }
+      #instructions-toggle {
+        flex: 0 0 72px;
+        width: 72px;
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        border-radius: 4px;
+        background: rgba(8, 16, 12, 0.78);
+        color: #d7ffd0;
+        font: 700 10px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        letter-spacing: 0;
+        pointer-events: auto;
+        cursor: pointer;
+      }
+      #instructions-toggle:hover,
+      #instructions-toggle:focus-visible {
+        border-color: var(--matrix-green);
+        outline: 2px solid rgba(57, 255, 20, 0.45);
+        outline-offset: 2px;
+      }
+      .touch-help { display: none; }
+      #mobile-controls {
+        display: none;
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      #move-stick {
+        position: absolute;
+        left: max(24px, calc(env(safe-area-inset-left) + 16px));
+        bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
+        width: 132px;
+        height: 132px;
+        box-sizing: border-box;
+        border: 2px solid var(--control-edge);
+        border-radius: 50%;
+        background: var(--control-fill);
+        box-shadow: inset 0 0 22px rgba(57, 255, 20, 0.12), 0 0 18px rgba(0, 0, 0, 0.38);
+        pointer-events: auto;
+        touch-action: none;
+      }
+      #move-stick::before {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border: 1px solid rgba(183, 255, 171, 0.2);
+        border-radius: 50%;
+      }
+      #move-stick-thumb {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 54px;
+        height: 54px;
+        margin: -27px 0 0 -27px;
+        border: 2px solid #d7ffd0;
+        border-radius: 50%;
+        box-sizing: border-box;
+        background: rgba(34, 82, 43, 0.94);
+        box-shadow: 0 0 14px rgba(57, 255, 20, 0.42);
+        will-change: transform;
+      }
+      #move-stick.active { border-color: var(--matrix-green); }
+      .action-button {
+        position: absolute;
+        width: 76px;
+        height: 76px;
+        padding: 0;
+        border: 2px solid var(--control-edge);
+        border-radius: 50%;
+        background: var(--control-fill);
+        color: #efffec;
+        font: 700 14px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+        letter-spacing: 0;
+        box-shadow: 0 0 18px rgba(0, 0, 0, 0.38);
+        pointer-events: auto;
+        touch-action: none;
+      }
+      .action-button.active {
+        border-color: var(--matrix-green);
+        background: rgba(35, 103, 43, 0.9);
+        box-shadow: 0 0 18px rgba(57, 255, 20, 0.42);
+      }
+      #punch-button {
+        right: max(22px, calc(env(safe-area-inset-right) + 14px));
+        bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
+      }
+      #jump-button {
+        right: max(22px, calc(env(safe-area-inset-right) + 14px));
+        bottom: max(116px, calc(env(safe-area-inset-bottom) + 108px));
+      }
+      @media (any-pointer: coarse) {
+        #mobile-controls { display: block; }
+        .desktop-help { display: none; }
+        .touch-help { display: inline; }
+      }
+      body.touch-controls #mobile-controls { display: block; }
+      body.touch-controls .desktop-help { display: none; }
+      body.touch-controls .touch-help { display: inline; }
+      body.instructions-desktop .desktop-help { display: inline; }
+      body.instructions-desktop .touch-help { display: none; }
+      body.instructions-touch .desktop-help { display: none; }
+      body.instructions-touch .touch-help { display: inline; }
+      @media (orientation: landscape) and (max-height: 520px) {
+        #hud { font-size: 11px; line-height: 1.45; }
+        #move-stick { width: 116px; height: 116px; }
+        .action-button { width: 68px; height: 68px; }
+        #jump-button {
+          bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
+        }
+      }
     </style>
   </head>
   <body>
     <canvas id="app"></canvas>
     <div id="hud">
-      <b>AGENT SYNDICATE</b> // prototype 0.1<br />
-      Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
-      Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; Esc — release mouse
+      <div id="hud-heading">
+        <span><b>AGENT SYNDICATE</b> // prototype 0.1</span>
+        <button id="instructions-toggle" type="button" aria-controls="control-instructions">KEYS</button>
+      </div>
+      <div id="control-instructions" aria-live="polite">
+      <span class="desktop-help">
+        Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
+        Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; Esc — release mouse
+      </span>
+      <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera</span>
+      </div>
+    </div>
+    <div id="mobile-controls" aria-label="Touch controls">
+      <div id="move-stick" aria-label="Movement joystick">
+        <div id="move-stick-thumb"></div>
+      </div>
+      <button id="jump-button" class="action-button" type="button" aria-label="Jump">JUMP</button>
+      <button id="punch-button" class="action-button" type="button" aria-label="Punch">HIT</button>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
