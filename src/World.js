@@ -19,6 +19,9 @@ export class World {
 
   collide(pos, radius) {
     for (const collider of this.colliders) {
+      const clearsCollider = collider.height !== undefined && pos.y >= collider.height;
+      if (clearsCollider) continue;
+
       const nearestX = THREE.MathUtils.clamp(
         pos.x, collider.x - collider.hx, collider.x + collider.hx
       );
@@ -57,6 +60,17 @@ export class World {
     pos.z = THREE.MathUtils.clamp(
       pos.z, -GARAGE_HALF_DEPTH + radius, GARAGE_HALF_DEPTH - radius
     );
+  }
+
+  groundHeight(pos) {
+    let height = 0;
+    for (const collider of this.colliders) {
+      const standable = collider.height !== undefined &&
+        Math.abs(pos.x - collider.x) <= collider.hx &&
+        Math.abs(pos.z - collider.z) <= collider.hz;
+      if (standable) height = Math.max(height, collider.height);
+    }
+    return height;
   }
 
   dispose() {
@@ -342,7 +356,7 @@ export function buildWorld(scene) {
     [-20.15, 4], [20.15, 12], [-20.15, 20], [20.15, 36], [-20.15, 44],
   ];
   parkedCars.forEach(([x, z]) => {
-    colliders.push({ x, z, hx: 2.3, hz: 1.45 });
+    colliders.push({ x, z, hx: 2.3, hz: 1.45, height: 1.65 });
   });
   const world = new World(root, colliders);
   addParkedCars(scene, parkedCars, world);

@@ -53,6 +53,38 @@
         outline: 2px solid rgba(57, 255, 20, 0.45);
         outline-offset: 2px;
       }
+      #combat-hud {
+        width: min(230px, calc(100vw - 32px));
+        margin-top: 10px;
+        color: #d7ffd0;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      #enemy-health-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      #enemy-health-meter {
+        width: 100%;
+        height: 7px;
+        overflow: hidden;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        background: rgba(8, 16, 12, 0.82);
+      }
+      #enemy-health-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--matrix-green);
+        box-shadow: 0 0 9px rgba(57, 255, 20, 0.65);
+        transform-origin: left center;
+        transition: transform 120ms linear;
+      }
+      #objective {
+        margin-top: 5px;
+        color: var(--matrix-green);
+      }
       .touch-help { display: none; }
       #mobile-controls {
         display: none;
@@ -162,6 +194,23 @@
         Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; Esc — release mouse
       </span>
       <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera</span>
+      </div>
+      <div id="combat-hud">
+        <div id="enemy-health-label">
+          <span>SYSTEM AGENT</span>
+          <span id="enemy-health-value">3 / 3</span>
+        </div>
+        <div
+          id="enemy-health-meter"
+          role="progressbar"
+          aria-label="System Agent health"
+          aria-valuemin="0"
+          aria-valuemax="3"
+          aria-valuenow="3"
+        >
+          <span id="enemy-health-fill"></span>
+        </div>
+        <div id="objective">OBJECTIVE // NEUTRALIZE TARGET</div>
       </div>
     </div>
     <div id="mobile-controls" aria-label="Touch controls">

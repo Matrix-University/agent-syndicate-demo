@@ -4,6 +4,9 @@ import { Player } from './Player.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
 import { Input } from './Input.js';
 import { MobileControls } from './MobileControls.js';
+import { Enemy } from './Enemy.js';
+import { CombatSystem } from './CombatSystem.js';
+import { GreenCodeBurst } from './GreenCodeBurst.js';
 
 export class Game {
   constructor(canvas) {
@@ -34,6 +37,18 @@ export class Game {
     this.player.root.position.set(0, 0, -42);
     this.scene.add(this.player.root);
 
+    this.enemy = new Enemy();
+    this.enemy.root.position.set(0, 0, -35);
+    this.enemy.root.rotation.y = Math.PI;
+    this.scene.add(this.enemy.root);
+    this.combat = new CombatSystem();
+    this.greenCodeBurst = new GreenCodeBurst(this.scene);
+    this.enemyHealthMeter = document.getElementById('enemy-health-meter');
+    this.enemyHealthFill = document.getElementById('enemy-health-fill');
+    this.enemyHealthValue = document.getElementById('enemy-health-value');
+    this.objective = document.getElementById('objective');
+    this._updateEnemyHud();
+
     this.input = new Input();
     this.followCam = new ThirdPersonCamera(this.camera, this.player.root, canvas);
     this.mobileControls = new MobileControls(this.input, {
@@ -60,9 +75,25 @@ export class Game {
     // Clamp dt so a paused/backgrounded tab doesn't teleport the player.
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.player.update(dt, this.input, this.camera, this.world);
+    const hitEnemy = this.combat.update(this.player, this.enemy);
+    const defeatedEnemy = hitEnemy && !this.enemy.alive;
+    if (hitEnemy) this._updateEnemyHud();
+    if (defeatedEnemy) {
+      this.greenCodeBurst.play(this.enemy.root.position);
+      this.objective.textContent = 'OBJECTIVE // TARGET ELIMINATED';
+    }
+    this.enemy.update(dt);
+    this.greenCodeBurst.update(dt);
     this.followCam.update(dt);
     this.renderer.render(this.scene, this.camera);
     this.input.endFrame(); // clear edge-triggered input after everyone has read it
+  }
+
+  _updateEnemyHud() {
+    const healthRatio = this.enemy.health / this.enemy.maxHealth;
+    this.enemyHealthFill.style.transform = `scaleX(${healthRatio})`;
+    this.enemyHealthValue.textContent = `${this.enemy.health} / ${this.enemy.maxHealth}`;
+    this.enemyHealthMeter.setAttribute('aria-valuenow', String(this.enemy.health));
   }
 
   _onResize() {
@@ -84,6 +115,8 @@ export class Game {
       this.input.dispose();
       this.followCam.dispose();
       this.player.dispose();
+      this.enemy.dispose();
+      this.greenCodeBurst.dispose();
       this.world.dispose();
       this.scene.clear();
       this.renderer.dispose();

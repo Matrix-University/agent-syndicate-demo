@@ -4,6 +4,9 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { AnimationController, STATE } from './AnimationController.js';
 
 const MOVEMENT_EPSILON = 0.01;
+const PUNCH_DURATION = 0.42;
+const PUNCH_ACTIVE_START = 0.12;
+const PUNCH_ACTIVE_END = 0.25;
 
 // The playable character.
 //   root  -> moves through the world (this is what the camera follows)
@@ -46,6 +49,8 @@ export class Player {
     this.grounded = true;
     this.state = STATE.IDLE;
     this._t = 0; // animation clock (placeholder only)
+    this._punchTime = PUNCH_DURATION;
+    this._punchHitConsumed = true;
 
     // Scratch vectors reused each frame (avoid per-frame allocation).
     this._forward = new THREE.Vector3();
@@ -191,10 +196,17 @@ export class Player {
 
     // Give jump priority when both one-shot inputs arrive on the same frame.
     const wantsJump = input.jumpPressed && this.grounded;
-    if (this.anim && input.punchPressed && !wantsJump) this.anim.playAction('punch');
+    const punchReady = this._punchTime >= PUNCH_DURATION && !this.anim?.acting;
+    const startsPunch = punchReady && input.punchPressed && !wantsJump && this.grounded;
+    if (startsPunch) {
+      this._punchTime = 0;
+      this._punchHitConsumed = false;
+      this.anim?.playAction('punch');
+    }
 
     // Horizontal movement — rooted while a blocking action (punch) plays.
-    const rooted = this.anim ? this.anim.acting : false;
+    const punching = this._punchTime < PUNCH_DURATION;
+    const rooted = punching || !!this.anim?.acting;
     const speed = input.sprint ? this.speedSprint : this.speedWalk;
 
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
@@ -218,19 +230,25 @@ export class Player {
       this.grounded = false;
       justTookOff = true;
     }
+    const previousY = this.root.position.y;
     this.velocityY -= this.gravity * dt;
     this.root.position.y += this.velocityY * dt;
+    const groundHeight = world?.groundHeight(this.root.position) ?? 0;
+    const landedOnGround = this.velocityY <= 0 && previousY >= groundHeight &&
+      this.root.position.y <= groundHeight;
+    const landedOnFloor = groundHeight === 0 && this.root.position.y <= 0;
     let justLanded = false;
-    if (this.root.position.y <= 0) {
-      this.root.position.y = 0;
+    if (landedOnGround || landedOnFloor) {
+      this.root.position.y = groundHeight;
       this.velocityY = 0;
       if (!this.grounded) justLanded = true;
       this.grounded = true;
+    } else {
+      this.grounded = false;
     }
 
-    // Resolve against arena geometry (pillars + bounds). Horizontal only, so the
-    // jump arc is untouched. Zero out velocity into a surface so we don't keep
-    // pushing (and stick) against it.
+    // Resolve against arena geometry. Short obstacles stop the player until their
+    // feet clear the top; full-height pillars always block horizontal movement.
     if (world) {
       const px = this.root.position.x;
       const pz = this.root.position.z;
@@ -259,6 +277,19 @@ export class Player {
     } else {
       this._animate(dt, locomoting ? (running ? 1.6 : 1.0) : 0);
     }
+
+    this._punchTime = Math.min(this._punchTime + dt, PUNCH_DURATION);
+  }
+
+  get punchActive() {
+    return this._punchTime >= PUNCH_ACTIVE_START &&
+      this._punchTime <= PUNCH_ACTIVE_END;
+  }
+
+  consumePunchHit() {
+    const canHit = this.punchActive && !this._punchHitConsumed;
+    if (canHit) this._punchHitConsumed = true;
+    return canHit;
   }
 
   dispose() {
@@ -272,13 +303,25 @@ export class Player {
   // Procedural stand-in used only while the placeholder rig is showing (no GLB,
   // or it failed to load). Real clips are driven by the AnimationController above.
   _animate(dt, intensity) {
-    if (this.state === STATE.RUN || this.state === STATE.WALK) {
+    const punching = this._punchTime < PUNCH_DURATION;
+    if (punching) {
+      const progress = this._punchTime / PUNCH_DURATION;
+      const extension = Math.sin(progress * Math.PI);
+      const recoil = Math.sin(progress * Math.PI * 2) * 0.12;
+      this.armR.rotation.x = -extension * Math.PI * 0.62;
+      this.armR.rotation.z = -extension * 0.18;
+      this.armL.rotation.x = extension * 0.28;
+      this.torso.rotation.y = extension * 0.32 + recoil;
+      this.torso.position.y = 2.0;
+    } else if (this.state === STATE.RUN || this.state === STATE.WALK) {
       this._t += dt * (6 + intensity * 6);
       const swing = Math.sin(this._t) * 0.8 * intensity;
       this.legL.rotation.x = swing;
       this.legR.rotation.x = -swing;
       this.armL.rotation.x = -swing;
       this.armR.rotation.x = swing;
+      this.armR.rotation.z = 0;
+      this.torso.rotation.y = 0;
       this.torso.position.y = 2.0 + Math.abs(Math.sin(this._t)) * 0.06;
     } else {
       this._t += dt;
@@ -287,6 +330,8 @@ export class Player {
       this.legR.rotation.x *= 1 - k;
       this.armL.rotation.x *= 1 - k;
       this.armR.rotation.x *= 1 - k;
+      this.armR.rotation.z *= 1 - k;
+      this.torso.rotation.y *= 1 - k;
       this.torso.position.y = 2.0 + Math.sin(this._t * 1.5) * 0.03; // breathing
     }
   }

@@ -42,6 +42,9 @@ src/main.js             boots the Game
 src/Game.js             renderer, scene, camera, the update loop
 src/World.js            lights, floor, grid, blockout pillars
 src/Player.js           the character: rig, movement, animation state machine
+src/Enemy.js            primitive enemy, health, hit reactions, defeat
+src/CombatSystem.js     punch range, facing, and one-hit resolution
+src/GreenCodeBurst.js   reusable enemy defeat particle effect
 src/ThirdPersonCamera.js smooth follow camera
 src/Input.js            keyboard + mobile gameplay input contract
 src/MobileControls.js   touch joystick and action-button adapter
@@ -75,9 +78,10 @@ movement code in `update()` is untouched. **Mixamo** also works — it exports
 ## Where this goes next (the roadmap)
 
 1. ✅ Move a character around an arena (this seed).
-2. Add a punch: an `ATTACK` state, an attack animation, and hit detection.
-3. One dummy enemy that takes damage and explodes into green code (a particle
-   burst on death).
+2. ✅ Add edge-triggered punch input and a one-shot attack animation, including
+   the zero-asset primitive fallback.
+3. ✅ Add punch hit detection and one dummy enemy that takes damage and explodes
+   into green code (a particle burst on death).
 4. A crowd of enemies that encircle you, with an "attack slot" limiter so only
    one or two strike at a time.
 5. Pole pickup + an alternate moveset.
