@@ -1,114 +1,371 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// Resolves the player against the arena's static geometry. Colliders are axis-
-// aligned boxes on the ground plane ({x, z, hx, hz}); the player is treated as a
-// circle of `radius`. Pure scalar math, no per-frame allocation — `collide`
-// mutates the passed-in position in place (x/z only; vertical is the caller's).
+const GARAGE_HALF_WIDTH = 34;
+const GARAGE_HALF_DEPTH = 52;
+const CAR_MODELS = [
+  '/models/vehicles/sedan.glb',
+  '/models/vehicles/hatchback-sports.glb',
+  '/models/vehicles/suv.glb',
+];
+
+// Resolves the player against static garage geometry as a circle on the ground.
 export class World {
-  constructor(colliders, arenaRadius) {
+  constructor(colliders) {
     this.colliders = colliders;
-    this.arenaRadius = arenaRadius;
   }
 
   collide(pos, radius) {
-    // Push out of any box the circle overlaps (closest-point-on-AABB test).
-    for (const c of this.colliders) {
-      const nx = THREE.MathUtils.clamp(pos.x, c.x - c.hx, c.x + c.hx);
-      const nz = THREE.MathUtils.clamp(pos.z, c.z - c.hz, c.z + c.hz);
-      const dx = pos.x - nx;
-      const dz = pos.z - nz;
-      const d2 = dx * dx + dz * dz;
-      if (d2 >= radius * radius) continue;
+    for (const collider of this.colliders) {
+      const nearestX = THREE.MathUtils.clamp(
+        pos.x, collider.x - collider.hx, collider.x + collider.hx
+      );
+      const nearestZ = THREE.MathUtils.clamp(
+        pos.z, collider.z - collider.hz, collider.z + collider.hz
+      );
+      const dx = pos.x - nearestX;
+      const dz = pos.z - nearestZ;
+      const distanceSq = dx * dx + dz * dz;
+      const overlapsEdge = distanceSq < radius * radius && distanceSq > 1e-8;
+      const insideBox = distanceSq <= 1e-8;
 
-      if (d2 > 1e-8) {
-        // Outside the box but within `radius`: push along the surface normal.
-        const d = Math.sqrt(d2);
-        const push = (radius - d) / d;
+      if (overlapsEdge) {
+        const distance = Math.sqrt(distanceSq);
+        const push = (radius - distance) / distance;
         pos.x += dx * push;
         pos.z += dz * push;
-      } else {
-        // Center is inside the box: eject through the nearest face.
-        const toRight = c.x + c.hx - pos.x;
-        const toLeft = pos.x - (c.x - c.hx);
-        const toFar = c.z + c.hz - pos.z;
-        const toNear = pos.z - (c.z - c.hz);
-        const minX = Math.min(toRight, toLeft);
-        const minZ = Math.min(toFar, toNear);
-        if (minX < minZ) pos.x += toRight < toLeft ? radius + toRight : -(radius + toLeft);
-        else pos.z += toFar < toNear ? radius + toFar : -(radius + toNear);
+      } else if (insideBox) {
+        const toRight = collider.x + collider.hx - pos.x;
+        const toLeft = pos.x - (collider.x - collider.hx);
+        const toFar = collider.z + collider.hz - pos.z;
+        const toNear = pos.z - (collider.z - collider.hz);
+        const exitsOnX = Math.min(toRight, toLeft) < Math.min(toFar, toNear);
+
+        if (exitsOnX) {
+          pos.x += toRight < toLeft ? radius + toRight : -(radius + toLeft);
+        } else {
+          pos.z += toFar < toNear ? radius + toFar : -(radius + toNear);
+        }
       }
     }
 
-    // Keep the player inside the circular arena.
-    const dist = Math.hypot(pos.x, pos.z);
-    const maxR = this.arenaRadius - radius;
-    if (dist > maxR) {
-      const s = maxR / dist;
-      pos.x *= s;
-      pos.z *= s;
-    }
+    pos.x = THREE.MathUtils.clamp(
+      pos.x, -GARAGE_HALF_WIDTH + radius, GARAGE_HALF_WIDTH - radius
+    );
+    pos.z = THREE.MathUtils.clamp(
+      pos.z, -GARAGE_HALF_DEPTH + radius, GARAGE_HALF_DEPTH - radius
+    );
   }
 }
 
-// Builds the arena: lighting, floor, grid, and a ring of blockout pillars.
-// Returns a World holding the colliders the player resolves against.
+function addParkingLines(scene, material) {
+  const stripeGeometry = new THREE.BoxGeometry(5.8, 0.025, 0.12);
+  const stopGeometry = new THREE.BoxGeometry(0.12, 0.025, 6.3);
+  const centerGeometry = new THREE.BoxGeometry(0.16, 0.025, 3.4);
+
+  for (const side of [-1, 1]) {
+    for (let z = -44; z <= 44; z += 8) {
+      for (const offset of [-3.15, 3.15]) {
+        const stripe = new THREE.Mesh(stripeGeometry, material);
+        stripe.position.set(side * 20.15, 0.025, z + offset);
+        scene.add(stripe);
+      }
+
+      const stop = new THREE.Mesh(stopGeometry, material);
+      stop.position.set(side * 23.05, 0.025, z);
+      scene.add(stop);
+    }
+  }
+
+  for (let z = -47; z <= 47; z += 7) {
+    const dash = new THREE.Mesh(centerGeometry, material);
+    dash.position.set(0, 0.026, z);
+    scene.add(dash);
+  }
+}
+
+async function addParkedCars(scene, slots) {
+  const loader = new GLTFLoader();
+
+  try {
+    const models = await Promise.all(CAR_MODELS.map((url) => loader.loadAsync(url)));
+    slots.forEach(([x, z], index) => {
+      const car = models[(index * 2 + 1) % models.length].scene.clone(true);
+      car.scale.setScalar(1.65);
+      car.traverse((object) => {
+        if (object.isMesh) {
+          object.castShadow = true;
+          object.receiveShadow = true;
+        }
+      });
+
+      const bounds = new THREE.Box3().setFromObject(car);
+      const center = bounds.getCenter(new THREE.Vector3());
+      car.position.set(-center.x, -bounds.min.y, -center.z);
+
+      const parkingSpot = new THREE.Group();
+      parkingSpot.position.set(x, 0, z);
+      parkingSpot.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+      parkingSpot.add(car);
+      scene.add(parkingSpot);
+    });
+  } catch (error) {
+    console.warn('World: could not load parked vehicle models.', error);
+  }
+}
+
+function makeSign(text, width, height, background, foreground) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = Math.round(512 * height / width);
+  const context = canvas.getContext('2d');
+  context.fillStyle = background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.strokeStyle = foreground;
+  context.lineWidth = 12;
+  context.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+  context.fillStyle = foreground;
+  context.font = '700 150px Arial';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, canvas.width / 2, canvas.height / 2 + 5);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: texture })
+  );
+}
+
+// Builds a low-ceiling B2 parking deck around a clear central drive aisle.
 export function buildWorld(scene) {
-  scene.background = new THREE.Color(0x0a0a0f);
-  scene.fog = new THREE.Fog(0x0a0a0f, 24, 90);
+  scene.background = new THREE.Color(0x090b0a);
+  scene.fog = new THREE.Fog(0x111713, 30, 92);
 
-  const ambient = new THREE.AmbientLight(0x335544, 0.8);
-  scene.add(ambient);
+  const concreteMaterial = new THREE.MeshStandardMaterial({
+    color: 0x777b75, roughness: 0.94, metalness: 0.02,
+  });
+  const darkConcreteMaterial = new THREE.MeshStandardMaterial({
+    color: 0x373d39, roughness: 0.96, metalness: 0.02,
+  });
+  const ceilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0x6b706c, roughness: 1, metalness: 0,
+  });
+  const whitePaintMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd9ddd4, roughness: 0.8, emissive: 0x252721,
+  });
+  const yellowPaintMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe2b72f, roughness: 0.78, emissive: 0x302305,
+  });
+  const fixtureMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xe9fff2, emissiveIntensity: 3.8, roughness: 0.3,
+  });
+  const colliders = [];
 
-  // Key light (greenish, casts shadows) — gives the Matrix-ish tint.
-  const key = new THREE.DirectionalLight(0x9effa0, 3.0);
-  key.position.set(8, 18, 10);
-  key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.camera.left = -30;
-  key.shadow.camera.right = 30;
-  key.shadow.camera.top = 30;
-  key.shadow.camera.bottom = -30;
-  key.shadow.camera.far = 80;
-  scene.add(key);
+  scene.add(new THREE.HemisphereLight(0xd8f5df, 0x20241f, 1.35));
 
-  // Cool rim light for separation.
-  const rim = new THREE.DirectionalLight(0x224488, 1.2);
-  rim.position.set(-12, 8, -10);
-  scene.add(rim);
-
-  // Floor.
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(140, 140),
-    new THREE.MeshStandardMaterial({ color: 0x14161c, roughness: 0.95, metalness: 0.1 })
+    new THREE.PlaneGeometry(72, 110),
+    new THREE.MeshStandardMaterial({ color: 0x3f4541, roughness: 0.86, metalness: 0.08 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Grid overlay — helps you feel motion while moving.
-  const grid = new THREE.GridHelper(140, 70, 0x39ff14, 0x1d3b22);
-  grid.material.opacity = 0.25;
-  grid.material.transparent = true;
-  scene.add(grid);
+  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(72, 0.55, 110), ceilingMaterial);
+  ceiling.position.y = 7.25;
+  ceiling.receiveShadow = true;
+  scene.add(ceiling);
 
-  // Ring of pillars to give the space a sense of scale (and something to bump into).
-  const colliders = [];
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x202632, roughness: 0.8 });
-  const pillarGeo = new THREE.BoxGeometry(2, 9, 2);
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const r = 20;
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-    pillar.position.set(x, 4.5, z);
-    pillar.castShadow = true;
-    pillar.receiveShadow = true;
-    scene.add(pillar);
-    colliders.push({ x, z, hx: 1, hz: 1 }); // 2×2 footprint → half-extent 1
+  const sideWallGeometry = new THREE.BoxGeometry(1, 7.2, 110);
+  for (const x of [-35.5, 35.5]) {
+    const wall = new THREE.Mesh(sideWallGeometry, darkConcreteMaterial);
+    wall.position.set(x, 3.6, 0);
+    wall.receiveShadow = true;
+    scene.add(wall);
   }
 
-  // Bound the playable area well inside the 140×140 floor so you can't walk into
-  // the void; the fog hides the far edge anyway.
-  return new World(colliders, 60);
+  const farEndWall = new THREE.Mesh(
+    new THREE.BoxGeometry(72, 7.2, 1), darkConcreteMaterial
+  );
+  farEndWall.position.set(0, 3.6, 54.5);
+  farEndWall.receiveShadow = true;
+  scene.add(farEndWall);
+
+  const entranceWallGeometry = new THREE.BoxGeometry(30, 7.2, 1);
+  for (const x of [-21, 21]) {
+    const wall = new THREE.Mesh(entranceWallGeometry, darkConcreteMaterial);
+    wall.position.set(x, 3.6, -54.5);
+    wall.receiveShadow = true;
+    scene.add(wall);
+  }
+
+  const entranceHeader = new THREE.Mesh(
+    new THREE.BoxGeometry(12, 1.4, 1), darkConcreteMaterial
+  );
+  entranceHeader.position.set(0, 6.5, -54.5);
+  entranceHeader.receiveShadow = true;
+  scene.add(entranceHeader);
+
+  const entrancePortal = new THREE.Mesh(
+    new THREE.PlaneGeometry(11.8, 5.8),
+    new THREE.MeshBasicMaterial({ color: 0x020303 })
+  );
+  entrancePortal.position.set(0, 2.9, -54.04);
+  scene.add(entrancePortal);
+
+  const entryApron = new THREE.Mesh(
+    new THREE.BoxGeometry(10.5, 0.035, 10),
+    new THREE.MeshStandardMaterial({ color: 0x262c29, roughness: 0.88, metalness: 0.06 })
+  );
+  entryApron.position.set(0, 0.018, -49);
+  entryApron.receiveShadow = true;
+  scene.add(entryApron);
+
+  const entryGuideGeometry = new THREE.BoxGeometry(0.14, 0.03, 9.5);
+  for (const x of [-4.65, 4.65]) {
+    const guide = new THREE.Mesh(entryGuideGeometry, yellowPaintMaterial);
+    guide.position.set(x, 0.04, -49);
+    scene.add(guide);
+  }
+
+  const clearanceBar = new THREE.Mesh(
+    new THREE.BoxGeometry(10.5, 0.22, 0.22), yellowPaintMaterial
+  );
+  clearanceBar.position.set(0, 5.35, -53.35);
+  scene.add(clearanceBar);
+
+  const bollardGeometry = new THREE.BoxGeometry(0.42, 1.25, 0.42);
+  for (const x of [-5.35, 5.35]) {
+    const bollard = new THREE.Mesh(bollardGeometry, yellowPaintMaterial);
+    bollard.position.set(x, 0.625, -52.9);
+    bollard.castShadow = true;
+    scene.add(bollard);
+  }
+
+  const entrySign = makeSign('ENTRY', 5.8, 1.05, '#174d32', '#f5fff6');
+  entrySign.position.set(0, 4.62, -53.92);
+  scene.add(entrySign);
+
+  const pillarGeometry = new THREE.BoxGeometry(2.25, 7.2, 2.25);
+  const safetyBandGeometry = new THREE.BoxGeometry(2.32, 1.1, 2.32);
+  const beamGeometry = new THREE.BoxGeometry(56, 0.75, 0.9);
+  for (let z = -48; z <= 48; z += 16) {
+    const beam = new THREE.Mesh(beamGeometry, darkConcreteMaterial);
+    beam.position.set(0, 6.6, z);
+    beam.castShadow = true;
+    scene.add(beam);
+
+    for (const x of [-14, 14]) {
+      const pillar = new THREE.Mesh(pillarGeometry, concreteMaterial);
+      pillar.position.set(x, 3.6, z);
+      pillar.castShadow = true;
+      pillar.receiveShadow = true;
+      scene.add(pillar);
+      colliders.push({ x, z, hx: 1.125, hz: 1.125 });
+
+      const safetyBand = new THREE.Mesh(safetyBandGeometry, yellowPaintMaterial);
+      safetyBand.position.set(x, 0.72, z);
+      safetyBand.castShadow = true;
+      scene.add(safetyBand);
+    }
+  }
+
+  addParkingLines(scene, whitePaintMaterial);
+
+  const curbGeometry = new THREE.BoxGeometry(0.45, 0.28, 2.7);
+  for (const side of [-1, 1]) {
+    for (let z = -44; z <= 44; z += 8) {
+      const curb = new THREE.Mesh(curbGeometry, yellowPaintMaterial);
+      curb.position.set(side * 23.4, 0.15, z);
+      scene.add(curb);
+    }
+  }
+
+  const lightGeometry = new THREE.BoxGeometry(0.32, 0.12, 6.4);
+  for (let z = -45; z <= 45; z += 10) {
+    for (const x of [-7, 7]) {
+      const fixture = new THREE.Mesh(lightGeometry, fixtureMaterial);
+      fixture.position.set(x, 6.78, z);
+      scene.add(fixture);
+    }
+
+    if (z % 20 === -5) {
+      const light = new THREE.PointLight(0xd5ffe2, 18, 24, 1.8);
+      light.position.set(0, 6.25, z);
+      scene.add(light);
+    }
+  }
+
+  const pipeGeometry = new THREE.CylinderGeometry(0.09, 0.09, 106, 8);
+  const pipeMaterials = [
+    new THREE.MeshStandardMaterial({ color: 0x8e2522, roughness: 0.65, metalness: 0.25 }),
+    new THREE.MeshStandardMaterial({ color: 0x202724, roughness: 0.55, metalness: 0.5 }),
+  ];
+  for (const [index, x] of [-28, -26.5, 26.5, 28].entries()) {
+    const pipe = new THREE.Mesh(pipeGeometry, pipeMaterials[index % 2]);
+    pipe.rotation.x = Math.PI / 2;
+    pipe.position.set(x, 6.55 - (index % 2) * 0.22, 0);
+    scene.add(pipe);
+  }
+
+  const parkedCars = [
+    [-20.15, -44], [20.15, -36], [-20.15, -28], [20.15, -20],
+    [-20.15, 4], [20.15, 12], [-20.15, 20], [20.15, 36], [-20.15, 44],
+  ];
+  parkedCars.forEach(([x, z]) => {
+    colliders.push({ x, z, hx: 2.3, hz: 1.45 });
+  });
+  addParkedCars(scene, parkedCars);
+
+  for (const x of [-14, 14]) {
+    const sign = makeSign('B2', 3.6, 1.7, '#173e31', '#f2f5ed');
+    sign.position.set(x, 4.7, x < 0 ? 1.14 : -1.14);
+    sign.rotation.y = x < 0 ? 0 : Math.PI;
+    scene.add(sign);
+  }
+
+  const exitSign = makeSign('EXIT  >', 5.5, 1.35, '#174d32', '#f5fff6');
+  exitSign.position.set(0, 5.25, 53.9);
+  exitSign.rotation.y = Math.PI;
+  scene.add(exitSign);
+
+  const exitDoor = new THREE.Group();
+  const doorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x52615a, roughness: 0.72, metalness: 0.38,
+  });
+  const frameMaterial = new THREE.MeshStandardMaterial({
+    color: 0x171b19, roughness: 0.65, metalness: 0.55,
+  });
+  const pushBarMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd2d7cf, roughness: 0.3, metalness: 0.85,
+  });
+  const door = new THREE.Mesh(new THREE.BoxGeometry(3.4, 4.8, 0.18), doorMaterial);
+  door.position.y = 2.4;
+  door.castShadow = true;
+  exitDoor.add(door);
+
+  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.22, 0.32), frameMaterial);
+  frameTop.position.set(0, 4.88, -0.08);
+  exitDoor.add(frameTop);
+  for (const x of [-1.84, 1.84]) {
+    const frameSide = new THREE.Mesh(new THREE.BoxGeometry(0.22, 5, 0.32), frameMaterial);
+    frameSide.position.set(x, 2.5, -0.08);
+    exitDoor.add(frameSide);
+  }
+
+  const pushBar = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.15, 0.16), pushBarMaterial);
+  pushBar.position.set(0, 2.05, -0.19);
+  exitDoor.add(pushBar);
+
+  const doorSign = makeSign('EXIT', 2.1, 0.72, '#174d32', '#f5fff6');
+  doorSign.position.set(0, 3.72, -0.2);
+  doorSign.rotation.y = Math.PI;
+  exitDoor.add(doorSign);
+
+  exitDoor.position.set(-27.5, 0, 53.86);
+  scene.add(exitDoor);
+
+  return new World(colliders);
 }

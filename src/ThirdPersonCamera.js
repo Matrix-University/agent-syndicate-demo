@@ -10,11 +10,11 @@ export class ThirdPersonCamera {
     this.target = target; // an Object3D to follow (the player root)
     this.domElement = domElement;
 
-    this.distance = 13;
+    this.distance = 11;
     this.yaw = Math.PI;   // start behind the player (which faces +Z at spawn)
-    this.pitch = 0.35;    // radians above the horizon
+    this.pitch = 0.22;    // stays below the garage's low ceiling
     this.minPitch = -0.15;
-    this.maxPitch = 1.2;
+    this.maxPitch = 0.34;
     this.sensitivity = 0.0024;
     this.lookOffset = new THREE.Vector3(0, 2.6, 0); // aim at the upper torso
 

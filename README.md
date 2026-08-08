@@ -1,9 +1,6 @@
 # Agent Syndicate — Three.js prototype
 
-A third-person seed for the brawler demo: a movable character with an animation
-state machine, a follow camera, and a blockout arena. The character is a
-placeholder built from primitives so the project runs with zero external assets;
-swap it for a Mixamo model when you're ready (see below).
+A third-person seed for the brawler demo: a movable character with an animation state machine, a follow camera, and a blockout arena. The character is a placeholder built from primitives so the project runs with zero external assets; swap it for a Mixamo model when you're ready (see below).
 
 ## Run it
 
