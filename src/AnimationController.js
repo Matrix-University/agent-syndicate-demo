@@ -2,7 +2,10 @@ import * as THREE from 'three';
 
 // Locomotion states. Player decides which one applies from movement; this
 // controller maps it to a clip and crossfades.
-export const STATE = { IDLE: 'idle', WALK: 'walk', RUN: 'run' };
+// CARRY is bound but never selected yet: the carry-walk posture is parked here
+// until carrying an object is an actual game state (Player.update sets IDLE /
+// WALK / RUN only). See scripts/lib/locomotion.mjs.
+export const STATE = { IDLE: 'idle', WALK: 'walk', RUN: 'run', CARRY: 'carry' };
 
 // State -> clip name fragments, matched case-insensitively as a substring and
 // tried in order, so a neutral "Idle_No_Loop" wins over "Idle_Lantern_Loop".
@@ -11,6 +14,7 @@ const CLIP_NAMES = {
   [STATE.IDLE]: ['idle_no', 'idle', 'breath'],
   [STATE.WALK]: ['walk'],
   [STATE.RUN]: ['run', 'jog', 'sprint'],
+  [STATE.CARRY]: ['carry'],
 };
 
 // If a state's own clip is missing, borrow one of these — so a model shipping a
@@ -19,6 +23,7 @@ const CLIP_FALLBACK = {
   [STATE.IDLE]: [],
   [STATE.WALK]: [STATE.RUN, STATE.IDLE],
   [STATE.RUN]: [STATE.WALK, STATE.IDLE],
+  [STATE.CARRY]: [STATE.WALK, STATE.IDLE],
 };
 
 // One-shot actions: triggered, played ONCE, then control returns to locomotion.
@@ -82,7 +87,8 @@ export class AnimationController {
 
   // Crossfade to the locomotion clip for `state`. Ignored while airborne or mid
   // action; during the land flourish, a moving state cancels it but idle lets it
-  // finish. `speedFactor` (speed / walkSpeed) scales playback so feet don't skate.
+  // finish. `speedFactor` is ground speed over the speed the state's clip was
+  // authored for (so ~1 at that speed), scaling playback so feet don't skate.
   setLocomotion(state, speedFactor = 1) {
     if (this._airborne || this._action) return;
     if (this._landing) {

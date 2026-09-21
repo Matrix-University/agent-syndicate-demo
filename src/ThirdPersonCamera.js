@@ -7,13 +7,13 @@ const TOUCH_CAMERA_ZONE_START = 0.45;
 // own direction of travel independently. Movement basis still comes from
 // camera.getWorldDirection() in Player, so steering the camera steers movement.
 export class ThirdPersonCamera {
-  constructor(camera, target, domElement) {
+  constructor(camera, target, domElement, opts = {}) {
     this.camera = camera;
     this.target = target; // an Object3D to follow (the player root)
     this.domElement = domElement;
 
     this.distance = 11;
-    this.yaw = Math.PI;   // start behind the player (which faces +Z at spawn)
+    this.yaw = 0;         // start behind the player (which faces -Z at spawn)
     this.pitch = 0.22;    // stays below the garage's low ceiling
     this.minPitch = -0.15;
     this.maxPitch = 0.34;
@@ -22,12 +22,14 @@ export class ThirdPersonCamera {
 
     // Scratch vectors reused each frame (no per-frame allocation).
     this._desired = new THREE.Vector3();
+    this._desiredClamped = new THREE.Vector3();
     this._look = new THREE.Vector3();
     this._offset = new THREE.Vector3();
     this._cameraPointerId = null;
     this._lastPointerX = 0;
     this._lastPointerY = 0;
     this._lastCanvasPointerType = null;
+    this._bounds = opts.bounds ?? null;
 
     // Pointer lock: click the canvas to capture the mouse, Esc to release.
     this._onClick = () => {
@@ -94,11 +96,26 @@ export class ThirdPersonCamera {
 
     this._look.copy(this.target.position).add(this.lookOffset);
     this._desired.copy(this._look).add(this._offset);
+    this._clampPointToBounds(this._desired, this._desiredClamped);
 
     // Critically-damped-ish smoothing (frame-rate independent).
     const lerp = 1 - Math.pow(0.0008, dt);
-    this.camera.position.lerp(this._desired, lerp);
+    this.camera.position.lerp(this._desiredClamped, lerp);
+    this._clampPointToBounds(this.camera.position, this.camera.position);
     this.camera.lookAt(this._look);
+  }
+
+  _clampPointToBounds(source, out) {
+    if (!this._bounds) {
+      out.copy(source);
+      return;
+    }
+
+    out.set(
+      THREE.MathUtils.clamp(source.x, this._bounds.minX, this._bounds.maxX),
+      THREE.MathUtils.clamp(source.y, this._bounds.minY, this._bounds.maxY),
+      THREE.MathUtils.clamp(source.z, this._bounds.minZ, this._bounds.maxZ)
+    );
   }
 
   dispose() {

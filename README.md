@@ -82,13 +82,13 @@ movement code in `update()` is untouched. **Mixamo** also works — it exports
    the zero-asset primitive fallback.
 3. ✅ Add punch hit detection and one dummy enemy that takes damage and explodes
    into green code (a particle burst on death).
-4. A crowd of enemies that encircle you, with an "attack slot" limiter so only
-   one or two strike at a time.
-5. Pole pickup + an alternate moveset.
-6. The fuse/split state machine: Hulk combat mode <-> invulnerable, regenerating twins mode.
+4. ✅ Agents appear as soon as the current one is on a last hit, with an
+   "attack slot" limiter so only one or two strike at a time.
+5. Must be able pick up a car and throw it . For now only one car can be lifted. Pick a car by the entry ramp.
 
 ## Game Scenes
 
+- Hell Club (video intro of Twins merging to make a hulk form)
 - Parking garage (animated)
 - Debir Court (game play)
 

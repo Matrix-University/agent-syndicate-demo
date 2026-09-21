@@ -14,6 +14,8 @@
 import { existsSync } from 'node:fs';
 import { NodeIO } from '@gltf-transform/core';
 import { prune, dedup, resample, mergeDocuments } from '@gltf-transform/functions';
+import { buildSkeleton } from './lib/skeleton.mjs';
+import { synthesizeLocomotion } from './lib/locomotion.mjs';
 
 // Inputs live in models-src/ (not served to the browser); only the final baked
 // asset is written into public/models/.
@@ -22,11 +24,15 @@ const [, , CHAR = 'models-src/agent.glb',
   OUT = 'models-src/agent-animated.glb'] = process.argv;
 const KEEP_ALL = process.argv.includes('--all');
 
-// Clips to embed (by exact name). Curated for the brawler: idle, walk, an attack
-// pair, and a hit reaction. Edit this list or pass --all.
+// The clip Walk and Run are authored from (see scripts/lib/locomotion.mjs).
+const LOCOMOTION_SOURCE = 'Walk_Carry_Loop';
+const SYNTHESIZED = ['Walk', 'Run'];
+
+// Clips to embed (by exact name). Curated for the brawler: idle, locomotion, an
+// attack pair, and a hit reaction. Edit this list or pass --all.
 const KEEP = new Set([
   'Idle_No_Loop',
-  'Walk_Carry_Loop',
+  'Walk_Carry_Loop', // source for the synthesized Walk/Run; kept as Carry_Loop
   'Melee_Hook',
   'Melee_Hook_Rec',
   'Hit_Knockback',
@@ -103,6 +109,21 @@ for (const node of charRoot.listNodes()) {
   if (!charNodesBefore.has(node)) node.dispose();
 }
 
+// The library has no neutral walk and no run — only a carry walk whose arms are
+// pinned in a carry pose. Author real Walk/Run clips from its (correct) lower
+// body, then keep the original as Carry_Loop for the future carry-object state.
+const skeleton = buildSkeleton(charRoot);
+const stats = synthesizeLocomotion(charDoc, skeleton, LOCOMOTION_SOURCE);
+const carry = charRoot.listAnimations().find((a) => a.getName() === LOCOMOTION_SOURCE);
+if (carry) carry.setName('Carry_Loop');
+console.log(
+  `Synthesized Walk + Run from ${LOCOMOTION_SOURCE} ` +
+  `(${stats.frames} frames, ±${stats.amplitudeDeg.toFixed(1)}° thigh swing about ` +
+  `${stats.centreDeg.toFixed(1)}°; hips re-pitched to a ` +
+  `${stats.hipPitchDeg.toFixed(1)}° neutral; foot-lock shifted the pelvis by up to ` +
+  `${(stats.footLockMaxLift * 100).toFixed(1)}cm).`
+);
+
 // resample() losslessly drops redundant keyframes (big animation win); prune and
 // dedup clean orphaned/duplicate data left by the merge.
 await charDoc.transform(resample(), prune(), dedup());
@@ -123,6 +144,7 @@ if (unmatched.size) {
   console.warn(`⚠ ${unmatched.size} bone(s) had no match and were left as-is:`,
     [...unmatched].join(', '));
 }
-if (keptClips.length !== embedded.length) {
-  console.warn(`⚠ requested ${keptClips.length} clips but embedded ${embedded.length}.`);
+const expected = keptClips.length + SYNTHESIZED.length;
+if (expected !== embedded.length) {
+  console.warn(`⚠ expected ${expected} clips but embedded ${embedded.length}.`);
 }

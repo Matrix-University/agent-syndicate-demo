@@ -118,7 +118,27 @@ priority-ordered) with `CLIP_FALLBACK` covering missing clips. Override priority
 a **looping state** extends `STATE` + `CLIP_NAMES` (+ the `this.state =` line in
 `Player.update`); a **one-shot** extends `ACTIONS` + an `Input` intent getter + an
 `anim.playAction(...)` call. Either way add the clip to the `KEEP` set in
-`scripts/bake-animations.mjs` and re-bake. Shipped models go in `public/models/`;
+`scripts/bake-animations.mjs` and re-bake.
+
+**Every clip is catalogued** in [docs/animation-catalog.md](docs/animation-catalog.md):
+what ships, its authoring tier (pass-through / tweaked / authored), what it's bound
+to, and the 35 clips still unused in `models-src/UAL2_Standard.glb`. Check it for an
+existing clip before authoring a new move, and record any clip you add there.
+`npm run clips` (`scripts/list-clips.mjs`) regenerates its tables from the GLBs.
+
+**`Walk` and `Run` are authored by the bake, not shipped by the library** — UAL2
+has no neutral walk and no run, only `Walk_Carry_Loop` (real legs, arms locked in
+a carry pose). `scripts/lib/locomotion.mjs` keeps that clip's lower body and
+authors the upper body, then derives `Run` from it; the original survives as
+`Carry_Loop`, bound to `STATE.CARRY` but not selected by anything until carrying
+an object becomes a game state. Don't re-point `WALK` at the carry clip. The carry
+stance also tips the pelvis ~33° *back*, so the bake re-pitches the hips forward
+to a neutral read from `Idle_No_Loop` — straightening the spine alone leaves the
+character walking on its heels. Tune via
+the `WALK`/`RUN` constants there, re-bake, and check with
+`node scripts/inspect-locomotion.mjs` (arm/leg correlation should be near −1.00).
+`setLocomotion`'s `speedFactor` is ground speed over the speed that state's clip
+was authored for — keep it per-state, or `Run` gets driven at the walk's rate. Shipped models go in `public/models/`;
 bake **inputs** live in `models-src/`. `.dispose()` what you swap out (`disposeObject`,
 `AnimationController.dispose()`).
 

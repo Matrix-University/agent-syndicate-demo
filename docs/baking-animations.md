@@ -35,9 +35,65 @@ clip list.
 
 Edit the `KEEP` set at the top of [`scripts/bake-animations.mjs`](../scripts/bake-animations.mjs)
 (or pass `--all` to embed every clip). Default is a brawler starter set:
-`Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`.
+`Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`,
+plus the three `NinjaJump_*` phases. The full shipped set, and what each clip is
+bound to, is catalogued in [animation-catalog.md](./animation-catalog.md).
 Keeping fewer clips = smaller file (animation keyframes, not geometry, dominate the
 size — Draco won't shrink them).
+
+## Walk and Run are authored, not copied
+
+UAL2 has **no neutral walk and no run**. Its only forward locomotion is
+`Walk_Carry_Loop`, and there the legs are a real human walk while the arms are
+pinned in a carry pose — a constant 66.5° off rest on every frame, never swinging
+— over a static ~17° spine lean. Bound to `WALK` the character strolled as if
+holding a crate, and `RUN` fell back to the same clip.
+
+So the bake calls [`scripts/lib/locomotion.mjs`](../scripts/lib/locomotion.mjs),
+which keeps that clip's (correct, floor-locked) lower body and authors the rest:
+
+- **`Walk`** — carry lean removed from the spine by subtracting its *average*
+  offset from rest, so the torso's natural walking sway survives; **hips
+  re-pitched forward**; arms, elbows and fingers authored fresh. Arm phase is read
+  off the source's own thigh swing, so the arms can't fall out of step with the feet.
+- **`Run`** — that walk with the thigh/calf swing exaggerated 1.35×, a forward
+  spine lean, a wider bent-elbow pump and a faster cadence. Because stretching the
+  legs lifts the feet, pelvis height is re-solved per frame so the planted foot
+  still meets the floor.
+- **`Carry_Loop`** — the original clip, renamed and kept. It is bound to
+  `STATE.CARRY` in `AnimationController` but nothing selects it yet; it is waiting
+  for carrying an object to become a real game state.
+
+**The hips are the other half of the fix.** The carry stance tips the pelvis ~33°
+*back* and curls the spine forward to compensate, so straightening the spine alone
+just exposes the backward hip and leaves the character walking on its heels.
+`setHipPitch` re-pitches the pelvis to a neutral read from the rig's own
+`Idle_No_Loop` (an artist-authored standing posture on this exact skeleton),
+plus `hipLean` degrees forward — while re-seating each thigh to the world
+orientation it already had, so the legs and the planted foot don't move and only
+the trunk swings. Measured hip→neck lean: idle **+8.0°**, walk **+5.4°**, run
+**+18.6°** (was −28.7° backwards).
+
+Two ordering rules that bite if you rearrange this: `setHipPitch` must run *before*
+`authorArms` (the shoulders are solved against the actual torso), and the run's leg
+exaggeration must scale each leg's swing about the clip's **own mean pose**, not
+about the bind pose — the hip correction folds a constant offset into those locals,
+and scaling that too drags the whole stride forward instead of widening it.
+
+Shoulders are solved against the **actual** torso each frame rather than the bind
+pose: this source pitches the pelvis forward for the carry crouch, and anchoring
+the arms to the bind frame inherited that lean and left both arms reaching ~33°
+forward. Tune the feel via the `WALK` / `RUN` constants at the top of that module.
+
+Check a bake with:
+
+```bash
+node scripts/inspect-locomotion.mjs models-src/agent-animated.glb Walk Run
+```
+
+It reports swing ranges, foot-contact spread and hand/hip clearance, and the
+arm/leg correlation — which should sit near **−1.00**, meaning each arm swings
+opposite the leg on its own side.
 
 ## Adding a new animation
 
@@ -60,9 +116,10 @@ control returns to locomotion. This is the `ACTIONS` map + `playAction()` system
 **Either way**, the clip must be in the shipped GLB: add its exact name to `KEEP` in
 [`scripts/bake-animations.mjs`](../scripts/bake-animations.mjs) and run
 `npm run bake:anims:dcl`. (Punch already works — `Melee_Hook` is in the default
-`KEEP` set.) Available clip names are listed by inspecting the library; the current
-pack includes `Melee_Hook`, `Sword_Regular_A/B/C`, `Sword_Heavy_Combo`,
-`OverhandThrow`, `Hit_Knockback`, and the `NinjaJump_*` set.
+`KEEP` set.) Every clip that ships, and every clip still unused in the library, is
+listed in [animation-catalog.md](./animation-catalog.md) — check there for one that
+already does what you need before authoring a move. Regenerate its tables with
+`npm run clips`.
 
 **Jump** (implemented) is a *clip sequence plus vertical movement*: `Player.update()`
 runs a small physics block (jump velocity + gravity + ground check on
@@ -85,10 +142,12 @@ feels too high or floaty.
 4. **Rebind** every merged animation channel from the library's duplicate bone to
    the character's same-named bone.
 5. Dispose the library's leftover scene + orphan skeleton nodes.
-6. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
+6. Synthesize `Walk` and `Run` from `Walk_Carry_Loop` and rename it `Carry_Loop`
+   (see above).
+7. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
    one buffer, write the GLB.
 
-No Blender required. Validated on the current assets: 5 clips, 65 animated bones,
+No Blender required. Validated on the current assets: 10 clips, 65 animated bones,
 all channel targets resolve, single skin/skeleton.
 
 ## Blender alternative
@@ -118,5 +177,5 @@ slightly by Blender version (3.6+ / 4.x).
     it's served) — it needs no decoder.
 - **Decentraland (SDK7):** upload the same `agent-dcl.glb` and load it with
   `GltfContainer.create(e, { src: 'models/agent-dcl.glb' })`, referencing clips by
-  their exact names via `Animator` (e.g. `Idle_No_Loop`, `Walk_Carry_Loop`). See
+  their exact names via `Animator` (e.g. `Idle_No_Loop`, `Walk`, `Run`). See
   [decentraland-asset-compat.md](./decentraland-asset-compat.md).

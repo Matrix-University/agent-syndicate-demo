@@ -2,19 +2,52 @@ import * as THREE from 'three';
 
 const HIT_REACTION_DURATION = 0.24;
 const DEATH_DURATION = 0.7;
+const ORBIT_RADIUS = 5.2;
+const STRIKE_RADIUS = 2.05;
+const ORBIT_SPEED = 1.9;
+const STRIKE_SPEED = 3.4;
+const SLOT_ANGULAR_SPEED = 0.45;
+const HEAD_VARIANTS = ['black', 'blond', 'brown'];
+
+const HEAD_MATERIALS = {
+  black: {
+    color: 0x1b1a19,
+    roughness: 0.62,
+    metalness: 0.05,
+  },
+  blond: {
+    color: 0xd3c08d,
+    roughness: 0.68,
+    metalness: 0,
+  },
+  brown: {
+    color: 0x8b6748,
+    roughness: 0.66,
+    metalness: 0,
+  },
+};
 
 export class Enemy {
-  constructor() {
+  constructor(opts = {}) {
     this.root = new THREE.Group();
     this.rig = new THREE.Group();
     this.root.add(this.rig);
 
+    this.id = opts.id ?? 0;
+    this.headVariant = opts.headVariant ?? HEAD_VARIANTS[(Math.random() * HEAD_VARIANTS.length) | 0];
     this.maxHealth = 3;
     this.health = this.maxHealth;
     this.collisionRadius = 0.7;
     this.alive = true;
+    this.spawnedOnLastHit = false;
     this._hitTime = 0;
     this._deathTime = 0;
+    this._strikeTimer = 0.45 + Math.random() * 0.8;
+    this._strikeTime = 0;
+    this._strikeIntensity = 0;
+    this._orbitOffset = Math.random() * Math.PI * 2;
+    this._desired = new THREE.Vector3();
+    this._delta = new THREE.Vector3();
     this._disposed = false;
 
     this._buildPlaceholderRig();
@@ -29,9 +62,7 @@ export class Enemy {
       metalness: 0.16,
     });
     const shirtMaterial = new THREE.MeshStandardMaterial({
-      color: 0xd8ddd8,
-      roughness: 0.72,
-      metalness: 0,
+      ...HEAD_MATERIALS[this.headVariant],
     });
     const accentMaterial = new THREE.MeshStandardMaterial({
       color: 0x39ff14,
@@ -89,7 +120,9 @@ export class Enemy {
     return acceptsHit;
   }
 
-  update(dt) {
+  update(dt, opts = {}) {
+    if (this.alive && opts.playerPosition) this._updateMovement(dt, opts);
+
     if (this.alive && this._hitTime > 0) {
       this._hitTime = Math.max(0, this._hitTime - dt);
       const progress = 1 - this._hitTime / HIT_REACTION_DURATION;
@@ -98,10 +131,9 @@ export class Enemy {
       this.rig.position.z = -recoil * 0.22;
       this._suitMaterial.emissiveIntensity = recoil * 2.8;
     } else if (this.alive) {
-      const ease = 1 - Math.pow(0.0001, dt);
-      this.rig.rotation.x *= 1 - ease;
-      this.rig.position.z *= 1 - ease;
-      this._suitMaterial.emissiveIntensity *= 1 - ease;
+      this.rig.rotation.x = -this._strikeIntensity * 0.3;
+      this.rig.position.z = this._strikeIntensity * 0.3;
+      this._suitMaterial.emissiveIntensity = this._strikeIntensity * 1.5;
     } else {
       this._deathTime = Math.min(this._deathTime + dt, DEATH_DURATION);
       const progress = this._deathTime / DEATH_DURATION;
@@ -113,11 +145,76 @@ export class Enemy {
     }
   }
 
+  _updateMovement(dt, opts) {
+    const playerPosition = opts.playerPosition;
+    const attacking = !!opts.attacking;
+    const orbitIndex = opts.orbitIndex ?? 0;
+    const orbitCount = Math.max(1, opts.orbitCount ?? 1);
+    const strikeIndex = opts.strikeIndex ?? 0;
+    const strikeRadiusBase = opts.strikeRadius ?? STRIKE_RADIUS;
+
+    let desiredRadius = ORBIT_RADIUS;
+    let desiredAngle = this._orbitOffset + opts.time * SLOT_ANGULAR_SPEED;
+
+    if (attacking) {
+      desiredRadius = strikeRadiusBase + strikeIndex * 0.22;
+      desiredAngle = this._orbitOffset;
+      this._strikeTimer -= dt;
+      if (this._strikeTimer <= 0) {
+        this._strikeTime = 0.52;
+        this._strikeTimer = 0.9 + Math.random() * 0.8;
+      }
+    } else {
+      const ringFraction = orbitCount > 1 ? orbitIndex / orbitCount : 0;
+      desiredAngle += ringFraction * Math.PI * 2;
+      this._strikeTimer = Math.max(this._strikeTimer - dt * 0.4, 0.12);
+    }
+
+    this._desired.set(
+      playerPosition.x + Math.sin(desiredAngle) * desiredRadius,
+      0,
+      playerPosition.z + Math.cos(desiredAngle) * desiredRadius
+    );
+    this._delta.subVectors(this._desired, this.root.position);
+    this._delta.y = 0;
+    const distance = this._delta.length();
+    if (distance > 1e-4) {
+      const maxStep = (attacking ? STRIKE_SPEED : ORBIT_SPEED) * dt;
+      const step = Math.min(maxStep, distance);
+      this.root.position.addScaledVector(this._delta, step / distance);
+    }
+
+    this._delta.subVectors(playerPosition, this.root.position);
+    this._delta.y = 0;
+    if (this._delta.lengthSq() > 1e-6) {
+      const yaw = Math.atan2(this._delta.x, this._delta.z);
+      this.root.rotation.y = dampAngle(this.root.rotation.y, yaw, 8, dt);
+    }
+
+    if (this._strikeTime > 0) {
+      this._strikeTime = Math.max(0, this._strikeTime - dt);
+      const progress = 1 - this._strikeTime / 0.52;
+      this._strikeIntensity = Math.sin(progress * Math.PI);
+    } else {
+      const ease = 1 - Math.pow(0.0001, dt);
+      this._strikeIntensity += (0 - this._strikeIntensity) * ease;
+    }
+  }
+
+  get deathComplete() {
+    return !this.alive && this._deathTime >= DEATH_DURATION;
+  }
+
   reset() {
     this.health = this.maxHealth;
     this.alive = true;
+    this.spawnedOnLastHit = false;
     this._hitTime = 0;
     this._deathTime = 0;
+    this._strikeTimer = 0.45 + Math.random() * 0.8;
+    this._strikeTime = 0;
+    this._strikeIntensity = 0;
+    this._orbitOffset = Math.random() * Math.PI * 2;
     this.rig.visible = true;
     this.rig.position.set(0, 0, 0);
     this.rig.rotation.set(0, 0, 0);
@@ -147,4 +244,11 @@ function disposeObject(object) {
   });
   geometries.forEach((geometry) => geometry.dispose());
   materials.forEach((material) => material.dispose());
+}
+
+function dampAngle(current, target, speed, dt) {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return current + diff * (1 - Math.exp(-speed * dt));
 }

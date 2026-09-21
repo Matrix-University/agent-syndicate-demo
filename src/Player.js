@@ -4,9 +4,15 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { AnimationController, STATE } from './AnimationController.js';
 
 const MOVEMENT_EPSILON = 0.01;
-const PUNCH_DURATION = 0.42;
-const PUNCH_ACTIVE_START = 0.12;
-const PUNCH_ACTIVE_END = 0.25;
+const ATTACK_PROFILE = {
+  fists: {
+    duration: 0.42,
+    activeStart: 0.12,
+    activeEnd: 0.25,
+    reach: 2.25,
+    damage: 1,
+  },
+};
 
 // The playable character.
 //   root  -> moves through the world (this is what the camera follows)
@@ -49,7 +55,7 @@ export class Player {
     this.grounded = true;
     this.state = STATE.IDLE;
     this._t = 0; // animation clock (placeholder only)
-    this._punchTime = PUNCH_DURATION;
+    this._punchTime = ATTACK_PROFILE.fists.duration;
     this._punchHitConsumed = true;
 
     // Scratch vectors reused each frame (avoid per-frame allocation).
@@ -196,7 +202,8 @@ export class Player {
 
     // Give jump priority when both one-shot inputs arrive on the same frame.
     const wantsJump = input.jumpPressed && this.grounded;
-    const punchReady = this._punchTime >= PUNCH_DURATION && !this.anim?.acting;
+    const profile = this._attackProfile;
+    const punchReady = this._punchTime >= profile.duration && !this.anim?.acting;
     const startsPunch = punchReady && input.punchPressed && !wantsJump && this.grounded;
     if (startsPunch) {
       this._punchTime = 0;
@@ -205,7 +212,7 @@ export class Player {
     }
 
     // Horizontal movement — rooted while a blocking action (punch) plays.
-    const punching = this._punchTime < PUNCH_DURATION;
+    const punching = this._punchTime < profile.duration;
     const rooted = punching || !!this.anim?.acting;
     const speed = input.sprint ? this.speedSprint : this.speedWalk;
 
@@ -271,19 +278,36 @@ export class Player {
     if (this.anim) {
       if (justTookOff) this.anim.jumpTakeoff();
       else if (justLanded) this.anim.jumpLand();
+      // Rate each clip against the speed it was authored for. Run is its own clip
+      // now rather than a sped-up walk, so measuring it against speedWalk would
+      // drive it at up to 2.75x and turn the stride into a scramble.
+      const reference = this.state === STATE.RUN ? this.speedSprint : this.speedWalk;
       // setLocomotion is a no-op while the controller is airborne/acting.
-      this.anim.setLocomotion(this.state, horizontalSpeed / this.speedWalk);
+      this.anim.setLocomotion(this.state, horizontalSpeed / reference);
       this.anim.update(dt);
     } else {
       this._animate(dt, locomoting ? (running ? 1.6 : 1.0) : 0);
     }
 
-    this._punchTime = Math.min(this._punchTime + dt, PUNCH_DURATION);
+    this._punchTime = Math.min(this._punchTime + dt, profile.duration);
   }
 
   get punchActive() {
-    return this._punchTime >= PUNCH_ACTIVE_START &&
-      this._punchTime <= PUNCH_ACTIVE_END;
+    const profile = this._attackProfile;
+    return this._punchTime >= profile.activeStart &&
+      this._punchTime <= profile.activeEnd;
+  }
+
+  get attackReach() {
+    return this._attackProfile.reach;
+  }
+
+  get attackDamage() {
+    return this._attackProfile.damage;
+  }
+
+  get _attackProfile() {
+    return ATTACK_PROFILE.fists;
   }
 
   consumePunchHit() {
@@ -303,9 +327,9 @@ export class Player {
   // Procedural stand-in used only while the placeholder rig is showing (no GLB,
   // or it failed to load). Real clips are driven by the AnimationController above.
   _animate(dt, intensity) {
-    const punching = this._punchTime < PUNCH_DURATION;
+    const punching = this._punchTime < this._attackProfile.duration;
     if (punching) {
-      const progress = this._punchTime / PUNCH_DURATION;
+      const progress = this._punchTime / this._attackProfile.duration;
       const extension = Math.sin(progress * Math.PI);
       const recoil = Math.sin(progress * Math.PI * 2) * 0.12;
       this.armR.rotation.x = -extension * Math.PI * 0.62;

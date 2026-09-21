@@ -131,3 +131,6 @@ models-src/agent-animated.glb
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Screenshots from the run skill driver (.claude/skills/run-agent-syndicate-demo)
+.run-shots/

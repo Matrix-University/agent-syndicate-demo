@@ -1,6 +1,9 @@
 {
   "name": "agent-syndicate",
-  "author": {"name": "Tre' Grisby", "email": "trewaters@hotmail.com"},
+  "author": {
+    "name": "Tre' Grisby",
+    "email": "trewaters@hotmail.com"
+  },
   "description": "Agent syndicate Game",
   "private": true,
   "version": "0.2.0",
@@ -10,7 +13,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "bake:anims": "node scripts/bake-animations.mjs",
-    "bake:anims:dcl": "node scripts/bake-animations.mjs && gltf-transform draco models-src/agent-animated.glb public/models/agent-dcl.glb"
+    "bake:anims:dcl": "node scripts/bake-animations.mjs && gltf-transform draco models-src/agent-animated.glb public/models/agent-dcl.glb",
+    "clips": "node scripts/list-clips.mjs"
   },
   "dependencies": {
     "three": "^0.160.0"

@@ -5,6 +5,8 @@ const instructionsToggle = document.getElementById('instructions-toggle');
 const touchInstructions = document.querySelector('.touch-help');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
 const game = new Game(canvas);
+// Dev-only handle for the run skill's CDP driver (stripped from production builds).
+if (import.meta.env.DEV) window.__game = game;
 
 let showingTouchInstructions = false;
 let instructionsOverridden = false;

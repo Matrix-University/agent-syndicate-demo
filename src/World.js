@@ -3,6 +3,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const GARAGE_HALF_WIDTH = 34;
 const GARAGE_HALF_DEPTH = 52;
+const GARAGE_CAMERA_BOUNDS = Object.freeze({
+  minX: -34.8,
+  maxX: 34.8,
+  minY: 0.6,
+  maxY: 6.9,
+  minZ: -53.8,
+  maxZ: 53.8,
+});
 const CAR_MODELS = [
   '/models/vehicles/sedan.glb',
   '/models/vehicles/hatchback-sports.glb',
@@ -359,6 +367,7 @@ export function buildWorld(scene) {
     colliders.push({ x, z, hx: 2.3, hz: 1.45, height: 1.65 });
   });
   const world = new World(root, colliders);
+  world.cameraBounds = GARAGE_CAMERA_BOUNDS;
   addParkedCars(scene, parkedCars, world);
 
   for (const x of [-14, 14]) {
