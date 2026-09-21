@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const GARAGE_HALF_WIDTH = 34;
 const GARAGE_HALF_DEPTH = 52;
+const ENTRY_HALF_WIDTH = 12;
+const CHAMFER_START_Z = -34;
 const GARAGE_CAMERA_BOUNDS = Object.freeze({
   minX: -34.8,
   maxX: 34.8,
@@ -10,6 +12,8 @@ const GARAGE_CAMERA_BOUNDS = Object.freeze({
   maxY: 6.9,
   minZ: -53.8,
   maxZ: 53.8,
+  entryHalfWidth: 12.8,
+  chamferStartZ: CHAMFER_START_Z,
 });
 const CAR_MODELS = [
   '/models/vehicles/sedan.glb',
@@ -20,7 +24,17 @@ const CAR_MODELS = [
 // The one parking bay left empty for the liftable car (LiftableCar owns the mesh
 // and the collider there). It is the bay nearest the entry ramp, so the pickup is
 // a landmark you run *to* rather than something underfoot at spawn.
-export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -29, z: -44, yaw: Math.PI / 2 });
+export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -19, z: -41, yaw: Math.PI / 2 });
+
+function garageHalfWidthAt(z) {
+  if (z >= CHAMFER_START_Z) return GARAGE_HALF_WIDTH;
+  const taper = THREE.MathUtils.clamp(
+    (z + GARAGE_HALF_DEPTH) / (CHAMFER_START_Z + GARAGE_HALF_DEPTH),
+    0,
+    1
+  );
+  return THREE.MathUtils.lerp(ENTRY_HALF_WIDTH, GARAGE_HALF_WIDTH, taper);
+}
 
 // Resolves the player against static garage geometry as a circle on the ground.
 export class World {
@@ -80,12 +94,11 @@ export class World {
       }
     }
 
-    pos.x = THREE.MathUtils.clamp(
-      pos.x, -GARAGE_HALF_WIDTH + radius, GARAGE_HALF_WIDTH - radius
-    );
     pos.z = THREE.MathUtils.clamp(
       pos.z, -GARAGE_HALF_DEPTH + radius, GARAGE_HALF_DEPTH - radius
     );
+    const halfWidth = garageHalfWidthAt(pos.z);
+    pos.x = THREE.MathUtils.clamp(pos.x, -halfWidth + radius, halfWidth - radius);
   }
 
   groundHeight(pos) {
@@ -114,7 +127,7 @@ function addParkingLines(scene, material) {
   const stopGeometry = new THREE.BoxGeometry(0.12, 0.025, 6.3);
 
   for (const side of [-1, 1]) {
-    for (let z = -44; z <= 44; z += 8) {
+    for (let z = -28; z <= 44; z += 8) {
       for (const offset of [-3.15, 3.15]) {
         const stripe = new THREE.Mesh(stripeGeometry, material);
         stripe.position.set(side * 29, 0.025, z + offset);
@@ -126,6 +139,19 @@ function addParkingLines(scene, material) {
       scene.add(stop);
     }
   }
+}
+
+function addWallSegment(scene, start, end, material) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 7.2, Math.hypot(dx, dz)),
+    material
+  );
+  wall.position.set((start.x + end.x) / 2, 3.6, (start.z + end.z) / 2);
+  wall.rotation.y = Math.atan2(dx, dz);
+  wall.receiveShadow = true;
+  scene.add(wall);
 }
 
 function addStripedBarrier(scene, position, rotationY, materials, length = 9.6) {
@@ -311,23 +337,34 @@ export function buildWorld(scene) {
 
   scene.add(new THREE.HemisphereLight(0xc9e2d2, 0x182019, 1.8));
 
+  const garageShape = new THREE.Shape();
+  garageShape.moveTo(-36, -55);
+  garageShape.lineTo(36, -55);
+  garageShape.lineTo(36, 34);
+  garageShape.lineTo(13.5, 55);
+  garageShape.lineTo(-13.5, 55);
+  garageShape.lineTo(-36, 34);
+  garageShape.closePath();
+  const floorGeometry = new THREE.ShapeGeometry(garageShape);
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(72, 110),
+    floorGeometry,
     new THREE.MeshStandardMaterial({ color: 0x29332e, roughness: 0.92, metalness: 0.04 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const ceiling = new THREE.Mesh(new THREE.BoxGeometry(72, 0.55, 110), ceilingMaterial);
+  ceilingMaterial.side = THREE.DoubleSide;
+  const ceiling = new THREE.Mesh(floorGeometry, ceilingMaterial);
+  ceiling.rotation.x = -Math.PI / 2;
   ceiling.position.y = 7.25;
   ceiling.receiveShadow = true;
   scene.add(ceiling);
 
-  const sideWallGeometry = new THREE.BoxGeometry(1, 7.2, 110);
+  const sideWallGeometry = new THREE.BoxGeometry(1, 7.2, 89);
   for (const x of [-35.5, 35.5]) {
     const wall = new THREE.Mesh(sideWallGeometry, darkConcreteMaterial);
-    wall.position.set(x, 3.6, 0);
+    wall.position.set(x, 3.6, 10);
     wall.receiveShadow = true;
     scene.add(wall);
   }
@@ -339,8 +376,21 @@ export function buildWorld(scene) {
   farEndWall.receiveShadow = true;
   scene.add(farEndWall);
 
-  const entranceWallGeometry = new THREE.BoxGeometry(30, 7.2, 1);
-  for (const x of [-21, 21]) {
+  addWallSegment(
+    scene,
+    new THREE.Vector3(-35.5, 0, -34.5),
+    new THREE.Vector3(-12.5, 0, -54.5),
+    darkConcreteMaterial
+  );
+  addWallSegment(
+    scene,
+    new THREE.Vector3(35.5, 0, -34.5),
+    new THREE.Vector3(12.5, 0, -54.5),
+    darkConcreteMaterial
+  );
+
+  const entranceWallGeometry = new THREE.BoxGeometry(6.5, 7.2, 1);
+  for (const x of [-9.25, 9.25]) {
     const wall = new THREE.Mesh(entranceWallGeometry, darkConcreteMaterial);
     wall.position.set(x, 3.6, -54.5);
     wall.receiveShadow = true;
@@ -390,9 +440,11 @@ export function buildWorld(scene) {
   scene.add(entrySign);
 
   const pillarGeometry = new THREE.BoxGeometry(2.35, 7.2, 2.35);
-  const beamGeometry = new THREE.BoxGeometry(56, 0.75, 0.9);
   for (let z = -46; z <= 38; z += 12) {
-    const beam = new THREE.Mesh(beamGeometry, darkConcreteMaterial);
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(garageHalfWidthAt(z) * 2 - 2, 0.75, 0.9),
+      darkConcreteMaterial
+    );
     beam.position.set(0, 6.6, z);
     beam.castShadow = true;
     scene.add(beam);
@@ -411,7 +463,7 @@ export function buildWorld(scene) {
 
   const curbGeometry = new THREE.BoxGeometry(0.45, 0.28, 2.7);
   for (const side of [-1, 1]) {
-    for (let z = -44; z <= 44; z += 8) {
+    for (let z = -28; z <= 44; z += 8) {
       const curb = new THREE.Mesh(curbGeometry, concreteMaterial);
       curb.position.set(side * 32.25, 0.15, z);
       scene.add(curb);
@@ -421,6 +473,7 @@ export function buildWorld(scene) {
   const lightGeometry = new THREE.BoxGeometry(0.32, 0.12, 6.4);
   for (let z = -46; z <= 46; z += 8) {
     for (const x of [-23, -7, 7, 23]) {
+      if (Math.abs(x) > garageHalfWidthAt(z) - 1) continue;
       const fixture = new THREE.Mesh(lightGeometry, fixtureMaterial);
       fixture.position.set(x, 6.78, z);
       scene.add(fixture);
@@ -434,7 +487,7 @@ export function buildWorld(scene) {
     }
   }
 
-  const pipeGeometry = new THREE.CylinderGeometry(0.09, 0.09, 106, 8);
+  const pipeGeometry = new THREE.CylinderGeometry(0.09, 0.09, 86, 8);
   const pipeMaterials = [
     new THREE.MeshStandardMaterial({ color: 0x8e2522, roughness: 0.65, metalness: 0.25 }),
     new THREE.MeshStandardMaterial({ color: 0x202724, roughness: 0.55, metalness: 0.5 }),
@@ -442,14 +495,14 @@ export function buildWorld(scene) {
   for (const [index, x] of [-28, -26.5, 26.5, 28].entries()) {
     const pipe = new THREE.Mesh(pipeGeometry, pipeMaterials[index % 2]);
     pipe.rotation.x = Math.PI / 2;
-    pipe.position.set(x, 6.55 - (index % 2) * 0.22, 0);
+    pipe.position.set(x, 6.55 - (index % 2) * 0.22, 9);
     scene.add(pipe);
   }
 
   const parkedCars = [
     [-29, -36], [-29, -28], [-29, -20], [-29, -12], [-29, -4], [-29, 4],
     [-29, 12], [-29, 20], [-29, 28], [-29, 36],
-    [29, -44], [29, -36], [29, -28], [29, -20], [29, -12], [29, -4],
+    [29, -36], [29, -28], [29, -20], [29, -12], [29, -4],
     [29, 4], [29, 12], [29, 20], [29, 28], [29, 36], [29, 44],
     [-6.5, -28, 0], [6.5, 0, 0], [-6.5, 28, 0],
   ];

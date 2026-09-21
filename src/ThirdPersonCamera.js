@@ -122,10 +122,28 @@ export class ThirdPersonCamera {
       return;
     }
 
+    const z = THREE.MathUtils.clamp(source.z, this._bounds.minZ, this._bounds.maxZ);
+    let minX = this._bounds.minX;
+    let maxX = this._bounds.maxX;
+    if (this._bounds.chamferStartZ !== undefined && z < this._bounds.chamferStartZ) {
+      const taper = THREE.MathUtils.clamp(
+        (z - this._bounds.minZ) / (this._bounds.chamferStartZ - this._bounds.minZ),
+        0,
+        1
+      );
+      const halfWidth = THREE.MathUtils.lerp(
+        this._bounds.entryHalfWidth,
+        this._bounds.maxX,
+        taper
+      );
+      minX = -halfWidth;
+      maxX = halfWidth;
+    }
+
     out.set(
-      THREE.MathUtils.clamp(source.x, this._bounds.minX, this._bounds.maxX),
+      THREE.MathUtils.clamp(source.x, minX, maxX),
       THREE.MathUtils.clamp(source.y, this._bounds.minY, this._bounds.maxY),
-      THREE.MathUtils.clamp(source.z, this._bounds.minZ, this._bounds.maxZ)
+      z
     );
   }
 
