@@ -4,11 +4,13 @@ const PUNCH_FACING_DOT = 0.35;
 const CONTACT_EPSILON_SQ = 1e-6;
 const CLOSE_RANGE_BONUS_RADIUS_SQ = 1.35 * 1.35;
 const RANGE_TOLERANCE = 0.2;
+const STRIKE_FACING_DOT = 0.35;
 
 export class CombatSystem {
   constructor() {
     this._toEnemy = new THREE.Vector3();
     this._forward = new THREE.Vector3();
+    this._result = { hitEnemy: null, defeatedEnemy: false, playerHit: false };
   }
 
   update(player, enemies, preferredEnemy = null) {
@@ -54,11 +56,40 @@ export class CombatSystem {
     const appliesHit = connects && player.consumePunchHit();
     if (appliesHit) bestEnemy.takeDamage(attackDamage);
 
+    let playerHit = false;
+    for (const enemy of enemies) {
+      if (!enemy.alive || !enemy.attackActive) continue;
+      if (this._strikeConnects(player, enemy) && enemy.consumeStrikeHit()) {
+        if (player.takeDamage(enemy.attackDamage)) playerHit = true;
+      }
+    }
+
     // Pushback runs after hit test so crowd overlap cannot move the player out of
     // range before the punch is resolved on that frame.
     for (const enemy of enemies) this._resolveOverlap(player, enemy);
 
-    return appliesHit ? bestEnemy : null;
+    this._result.hitEnemy = appliesHit ? bestEnemy : null;
+    this._result.defeatedEnemy = appliesHit && !bestEnemy.alive;
+    this._result.playerHit = playerHit;
+    return this._result;
+  }
+
+  _strikeConnects(player, enemy) {
+    this._toEnemy.subVectors(player.root.position, enemy.root.position);
+    this._toEnemy.y = 0;
+    const distanceSq = this._toEnemy.lengthSq();
+    const inRange = distanceSq <= enemy.attackRange * enemy.attackRange;
+    if (!inRange) return false;
+
+    this._forward.set(
+      Math.sin(enemy.root.rotation.y),
+      0,
+      Math.cos(enemy.root.rotation.y)
+    );
+    const facingDot = distanceSq <= CONTACT_EPSILON_SQ
+      ? 1
+      : this._forward.dot(this._toEnemy) / Math.sqrt(distanceSq);
+    return facingDot >= STRIKE_FACING_DOT;
   }
 
   _resolveOverlap(player, enemy) {

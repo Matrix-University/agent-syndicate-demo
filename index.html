@@ -60,19 +60,20 @@
         font-size: 11px;
         line-height: 1.35;
       }
-      #enemy-health-label {
+      .hud-meter-label {
         display: flex;
         justify-content: space-between;
         margin-bottom: 4px;
       }
-      #enemy-health-meter {
+      .hud-meter-label + .hud-meter { margin-bottom: 8px; }
+      .hud-meter {
         width: 100%;
         height: 7px;
         overflow: hidden;
         border: 1px solid rgba(183, 255, 171, 0.55);
         background: rgba(8, 16, 12, 0.82);
       }
-      #enemy-health-fill {
+      .hud-meter-fill {
         display: block;
         width: 100%;
         height: 100%;
@@ -85,6 +86,45 @@
         margin-top: 5px;
         color: var(--matrix-green);
       }
+      #damage-flash {
+        position: fixed;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(120, 0, 0, 0) 35%,
+          rgba(150, 10, 10, 0.55) 78%,
+          rgba(190, 20, 20, 0.85) 100%
+        );
+      }
+      #game-over {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        box-sizing: border-box;
+        padding: 16px;
+        color: var(--matrix-green);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        text-align: center;
+        text-shadow: 0 0 14px rgba(57, 255, 20, 0.65);
+        pointer-events: none;
+        user-select: none;
+      }
+      #game-over[hidden] { display: none; }
+      #game-over-title {
+        margin: 0;
+        font-size: 3rem;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      #game-over-score { font-size: 1rem; }
+      #game-over-hint { color: #d7ffd0; font-size: 0.8125rem; opacity: 0.85; }
       .touch-help { display: none; }
       #mobile-controls {
         display: none;
@@ -179,10 +219,22 @@
           bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
         }
       }
+      @media (max-width: 420px) {
+        #game-over-title { font-size: 2rem; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hud-meter-fill { transition: none; }
+      }
     </style>
   </head>
   <body>
     <canvas id="app"></canvas>
+    <div id="damage-flash" aria-hidden="true"></div>
+    <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
+      <h1 id="game-over-title">AGENT DOWN</h1>
+      <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
+      <div id="game-over-hint">PRESS R OR TAP HIT TO RETRY</div>
+    </section>
     <div id="hud">
       <div id="hud-heading">
         <span><b>AGENT SYNDICATE</b> // prototype 0.1</span>
@@ -191,27 +243,42 @@
       <div id="control-instructions" aria-live="polite">
       <span class="desktop-help">
         Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
-        Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; Esc — release mouse
+        Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; Esc — release mouse
       </span>
       <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera</span>
       </div>
       <div id="combat-hud">
-        <div id="enemy-health-label">
-          <span>SYSTEM AGENT</span>
-          <span id="enemy-health-value">3 / 3</span>
+        <div class="hud-meter-label">
+          <span>AGENT RAYMENT</span>
+          <span id="player-health-value">25 / 25</span>
+        </div>
+        <div
+          id="player-health-meter"
+          class="hud-meter"
+          role="progressbar"
+          aria-label="Agent Rayment health"
+          aria-valuemin="0"
+          aria-valuemax="25"
+          aria-valuenow="25"
+        >
+          <span id="player-health-fill" class="hud-meter-fill"></span>
+        </div>
+        <div class="hud-meter-label">
+          <span>SYSTEM AGENTS</span>
+          <span id="enemy-health-value">5 ACTIVE / 0 DOWN</span>
         </div>
         <div
           id="enemy-health-meter"
+          class="hud-meter"
           role="progressbar"
-          aria-label="System Agent health"
+          aria-label="System Agent pack health"
           aria-valuemin="0"
-          aria-valuemax="3"
-          aria-valuenow="3"
+          aria-valuemax="15"
+          aria-valuenow="15"
         >
-          <span id="enemy-health-fill"></span>
+          <span id="enemy-health-fill" class="hud-meter-fill"></span>
         </div>
-        <div id="objective">OBJECTIVE // NEUTRALIZE TARGET</div>
-        <div id="pickup-prompt">KEEP MOVING TO CONTROL THE CROWD</div>
+        <div id="objective">OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)</div>
       </div>
     </div>
     <div id="mobile-controls" aria-label="Touch controls">

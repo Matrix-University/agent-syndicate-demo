@@ -2,11 +2,11 @@ import * as THREE from 'three';
 
 const HIT_REACTION_DURATION = 0.24;
 const DEATH_DURATION = 0.7;
-const ORBIT_RADIUS = 5.2;
-const STRIKE_RADIUS = 2.05;
-const ORBIT_SPEED = 1.9;
-const STRIKE_SPEED = 3.4;
-const SLOT_ANGULAR_SPEED = 0.45;
+const ORBIT_DRIFT_SPEED = 0.35;
+const WINDUP_DURATION = 0.4;
+const STRIKE_DURATION = 0.16;
+const RECOVER_DURATION = 0.9;
+const APPROACH_TIMEOUT = 4;
 const HEAD_VARIANTS = ['black', 'blond', 'brown'];
 
 const HEAD_MATERIALS = {
@@ -40,15 +40,27 @@ export class Enemy {
     this.collisionRadius = 0.7;
     this.alive = true;
     this.spawnedOnLastHit = false;
+    this.spawnedOnLastHit = false;
     this._hitTime = 0;
     this._deathTime = 0;
-    this._strikeTimer = 0.45 + Math.random() * 0.8;
-    this._strikeTime = 0;
-    this._strikeIntensity = 0;
-    this._orbitOffset = Math.random() * Math.PI * 2;
-    this._desired = new THREE.Vector3();
-    this._delta = new THREE.Vector3();
     this._disposed = false;
+
+    this.moveSpeed = 3.6;
+    this.turnSpeed = 5;
+    this.attackRange = 2;
+    this.attackDamage = 1;
+    this.orbitRadius = 5.5;
+    this.orbitAngle = 0;
+    this.orbitDir = 1;
+
+    this.manager = null;
+    this.aiState = 'orbit';
+    this._aiTimer = 0;
+    this._hasSlot = false;
+    this._strikeHitConsumed = true;
+
+    this._toTarget = new THREE.Vector3();
+    this._orbitPoint = new THREE.Vector3();
 
     this._buildPlaceholderRig();
   }
@@ -97,12 +109,29 @@ export class Enemy {
 
     const limbGeometry = new THREE.CapsuleGeometry(0.16, 0.78, 4, 8);
     limbGeometry.translate(0, -0.57, 0);
+    const limbs = [];
     for (const [x, y] of [[-0.7, 2.35], [0.7, 2.35], [-0.25, 1.32], [0.25, 1.32]]) {
       const limb = new THREE.Mesh(limbGeometry, this._suitMaterial);
       limb.position.set(x, y, 0);
       limb.castShadow = true;
       this.rig.add(limb);
+      limbs.push(limb);
     }
+    [this.armL, this.armR, this.legL, this.legR] = limbs;
+  }
+
+  get attackActive() {
+    return this.aiState === 'strike';
+  }
+
+  get timeSinceDefeat() {
+    return this.alive ? 0 : this._deathTime;
+  }
+
+  consumeStrikeHit() {
+    const canHit = this.attackActive && !this._strikeHitConsumed;
+    if (canHit) this._strikeHitConsumed = true;
+    return canHit;
   }
 
   takeDamage(amount) {
@@ -111,18 +140,20 @@ export class Enemy {
       this.health = Math.max(0, this.health - amount);
       this._hitTime = HIT_REACTION_DURATION;
       this._suitMaterial.emissiveIntensity = 2.8;
+      this.aiState = 'recover';
+      this._aiTimer = 0;
+      this._releaseSlot();
     }
     const defeated = acceptsHit && this.health === 0;
     if (defeated) {
       this.alive = false;
       this._deathTime = 0;
+      this.manager?.recordDefeat();
     }
     return acceptsHit;
   }
 
-  update(dt, opts = {}) {
-    if (this.alive && opts.playerPosition) this._updateMovement(dt, opts);
-
+  update(dt, player, world) {
     if (this.alive && this._hitTime > 0) {
       this._hitTime = Math.max(0, this._hitTime - dt);
       const progress = 1 - this._hitTime / HIT_REACTION_DURATION;
@@ -131,78 +162,115 @@ export class Enemy {
       this.rig.position.z = -recoil * 0.22;
       this._suitMaterial.emissiveIntensity = recoil * 2.8;
     } else if (this.alive) {
-      this.rig.rotation.x = -this._strikeIntensity * 0.3;
-      this.rig.position.z = this._strikeIntensity * 0.3;
-      this._suitMaterial.emissiveIntensity = this._strikeIntensity * 1.5;
+      const ease = 1 - Math.pow(0.0001, dt);
+      this.rig.rotation.x *= 1 - ease;
+      this.rig.position.z *= 1 - ease;
+      this._suitMaterial.emissiveIntensity *= 1 - ease;
     } else {
-      this._deathTime = Math.min(this._deathTime + dt, DEATH_DURATION);
-      const progress = this._deathTime / DEATH_DURATION;
+      this._deathTime += dt;
+      const progress = Math.min(this._deathTime / DEATH_DURATION, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       this.rig.rotation.x = -eased * Math.PI * 0.48;
       this.rig.position.y = -eased * 0.72;
       this._suitMaterial.emissiveIntensity = (1 - progress) * 3.5;
       this.rig.visible = progress < 1;
     }
+
+    if (this.alive && player) this._updateAI(dt, player, world);
   }
 
-  _updateMovement(dt, opts) {
-    const playerPosition = opts.playerPosition;
-    const attacking = !!opts.attacking;
-    const orbitIndex = opts.orbitIndex ?? 0;
-    const orbitCount = Math.max(1, opts.orbitCount ?? 1);
-    const strikeIndex = opts.strikeIndex ?? 0;
-    const strikeRadiusBase = opts.strikeRadius ?? STRIKE_RADIUS;
-
-    let desiredRadius = ORBIT_RADIUS;
-    let desiredAngle = this._orbitOffset + opts.time * SLOT_ANGULAR_SPEED;
-
-    if (attacking) {
-      desiredRadius = strikeRadiusBase + strikeIndex * 0.22;
-      desiredAngle = this._orbitOffset;
-      this._strikeTimer -= dt;
-      if (this._strikeTimer <= 0) {
-        this._strikeTime = 0.52;
-        this._strikeTimer = 0.9 + Math.random() * 0.8;
+  _updateAI(dt, player, world) {
+    switch (this.aiState) {
+      case 'orbit':
+        this._moveToward(this._orbitTarget(player, dt), dt);
+        if (this.manager?.requestAttackSlot()) {
+          this._hasSlot = true;
+          this.aiState = 'approach';
+          this._aiTimer = 0;
+        }
+        break;
+      case 'approach': {
+        this._aiTimer += dt;
+        const distance = this._moveToward(player.root.position, dt, this.attackRange);
+        if (distance <= this.attackRange) {
+          this.aiState = 'windup';
+          this._aiTimer = 0;
+        } else if (this._aiTimer >= APPROACH_TIMEOUT) {
+          this.aiState = 'orbit';
+          this._releaseSlot();
+        }
+        break;
       }
-    } else {
-      const ringFraction = orbitCount > 1 ? orbitIndex / orbitCount : 0;
-      desiredAngle += ringFraction * Math.PI * 2;
-      this._strikeTimer = Math.max(this._strikeTimer - dt * 0.4, 0.12);
+      case 'windup': {
+        this._aiTimer += dt;
+        const progress = Math.min(this._aiTimer / WINDUP_DURATION, 1);
+        this.armR.rotation.x = -progress * Math.PI * 0.5;
+        this._suitMaterial.emissiveIntensity = progress * 1.6;
+        if (this._aiTimer >= WINDUP_DURATION) {
+          this.aiState = 'strike';
+          this._aiTimer = 0;
+          this._strikeHitConsumed = false;
+        }
+        break;
+      }
+      case 'strike': {
+        this._aiTimer += dt;
+        const progress = Math.min(this._aiTimer / STRIKE_DURATION, 1);
+        this.armR.rotation.x = THREE.MathUtils.lerp(-Math.PI * 0.5, Math.PI * 0.35, progress);
+        this._suitMaterial.emissiveIntensity = 2.4;
+        if (this._aiTimer >= STRIKE_DURATION) {
+          this.aiState = 'recover';
+          this._aiTimer = 0;
+          this._releaseSlot();
+        }
+        break;
+      }
+      case 'recover': {
+        this._aiTimer += dt;
+        this._moveToward(this._orbitTarget(player, dt), dt);
+        const ease = 1 - Math.pow(0.0001, dt);
+        this.armR.rotation.x *= 1 - ease;
+        if (this._aiTimer >= RECOVER_DURATION) this.aiState = 'orbit';
+        break;
+      }
     }
 
-    this._desired.set(
-      playerPosition.x + Math.sin(desiredAngle) * desiredRadius,
-      0,
-      playerPosition.z + Math.cos(desiredAngle) * desiredRadius
-    );
-    this._delta.subVectors(this._desired, this.root.position);
-    this._delta.y = 0;
-    const distance = this._delta.length();
-    if (distance > 1e-4) {
-      const maxStep = (attacking ? STRIKE_SPEED : ORBIT_SPEED) * dt;
-      const step = Math.min(maxStep, distance);
-      this.root.position.addScaledVector(this._delta, step / distance);
-    }
-
-    this._delta.subVectors(playerPosition, this.root.position);
-    this._delta.y = 0;
-    if (this._delta.lengthSq() > 1e-6) {
-      const yaw = Math.atan2(this._delta.x, this._delta.z);
-      this.root.rotation.y = dampAngle(this.root.rotation.y, yaw, 8, dt);
-    }
-
-    if (this._strikeTime > 0) {
-      this._strikeTime = Math.max(0, this._strikeTime - dt);
-      const progress = 1 - this._strikeTime / 0.52;
-      this._strikeIntensity = Math.sin(progress * Math.PI);
-    } else {
-      const ease = 1 - Math.pow(0.0001, dt);
-      this._strikeIntensity += (0 - this._strikeIntensity) * ease;
-    }
+    this._faceTarget(player.root.position, dt);
+    world?.collide(this.root.position, this.collisionRadius);
   }
 
-  get deathComplete() {
-    return !this.alive && this._deathTime >= DEATH_DURATION;
+  _releaseSlot() {
+    if (!this._hasSlot) return;
+    this._hasSlot = false;
+    this.manager?.releaseAttackSlot();
+  }
+
+  _orbitTarget(player, dt) {
+    this.orbitAngle += this.orbitDir * ORBIT_DRIFT_SPEED * dt;
+    return this._orbitPoint.set(
+      player.root.position.x + Math.sin(this.orbitAngle) * this.orbitRadius,
+      0,
+      player.root.position.z + Math.cos(this.orbitAngle) * this.orbitRadius
+    );
+  }
+
+  _moveToward(target, dt, stopRadius = 0) {
+    this._toTarget.subVectors(target, this.root.position);
+    this._toTarget.y = 0;
+    const distance = this._toTarget.length();
+    if (distance > stopRadius && distance > 1e-4) {
+      const step = Math.min(this.moveSpeed * dt, distance - stopRadius);
+      this.root.position.addScaledVector(this._toTarget, step / distance);
+    }
+    return distance;
+  }
+
+  _faceTarget(target, dt) {
+    this._toTarget.subVectors(target, this.root.position);
+    this._toTarget.y = 0;
+    if (this._toTarget.lengthSq() < 1e-6) return;
+    const targetYaw = Math.atan2(this._toTarget.x, this._toTarget.z);
+    this.root.rotation.y = dampAngle(this.root.rotation.y, targetYaw, this.turnSpeed, dt);
   }
 
   reset() {
@@ -211,14 +279,15 @@ export class Enemy {
     this.spawnedOnLastHit = false;
     this._hitTime = 0;
     this._deathTime = 0;
-    this._strikeTimer = 0.45 + Math.random() * 0.8;
-    this._strikeTime = 0;
-    this._strikeIntensity = 0;
-    this._orbitOffset = Math.random() * Math.PI * 2;
     this.rig.visible = true;
     this.rig.position.set(0, 0, 0);
     this.rig.rotation.set(0, 0, 0);
     this._suitMaterial.emissiveIntensity = 0;
+    this.aiState = 'orbit';
+    this._aiTimer = 0;
+    this._hasSlot = false;
+    this._strikeHitConsumed = true;
+    this.armR.rotation.x = 0;
   }
 
   dispose() {

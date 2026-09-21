@@ -4,12 +4,18 @@ import { Player } from './Player.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
 import { Input } from './Input.js';
 import { MobileControls } from './MobileControls.js';
-import { Enemy } from './Enemy.js';
+import { EnemyManager } from './EnemyManager.js';
 import { CombatSystem } from './CombatSystem.js';
 import { GreenCodeBurst } from './GreenCodeBurst.js';
 
-const INITIAL_AGENT_COUNT = 2;
-const MAX_ACTIVE_AGENTS = 7;
+const PLAYER_SPAWN = new THREE.Vector3(-27.5, 0, 51);
+const PLAYER_SPAWN_YAW = Math.PI;
+const ENEMY_SPAWN_CENTER = new THREE.Vector3(PLAYER_SPAWN.x, 0, PLAYER_SPAWN.z - 10);
+const ENEMY_COUNT = 5;
+const PLAYER_HEALTH_PER_ENEMY = 5;
+const DEATH_FLASH_IN = 0.3;
+const DEATH_REVEAL_DELAY = 0.9;
+const DEATH_FLASH_OUT = 0.7;
 
 export class Game {
   constructor(canvas) {
@@ -36,28 +42,33 @@ export class Game {
       modelUrl: '/models/agent-dcl.glb',
       modelScale: 1.7,
       modelYaw: 0,
+      maxHealth: ENEMY_COUNT * PLAYER_HEALTH_PER_ENEMY,
     });
-    // Start under the EXIT sign at the far end, facing back down the lane to the entry ramp.
-    this.player.root.position.set(0, 0, 42);
-    this.player.root.rotation.y = Math.PI;
+    this.player.root.position.copy(PLAYER_SPAWN);
+    this.player.root.rotation.y = PLAYER_SPAWN_YAW;
     this.scene.add(this.player.root);
 
     this.combat = new CombatSystem();
     this.greenCodeBurst = new GreenCodeBurst(this.scene);
-    this.enemies = [];
-    this._enemyId = 1;
-    this._simTime = 0;
-    this._hudEnemy = null;
-
-    for (let i = 0; i < INITIAL_AGENT_COUNT; i += 1) {
-      this._spawnEnemy({ nearPlayer: i === 0 });
-    }
+    this.enemyManager = new EnemyManager(ENEMY_COUNT, ENEMY_SPAWN_CENTER);
+    this.enemyManager.addAll(this.scene);
+    this._focusEnemy = null;
 
     this.enemyHealthMeter = document.getElementById('enemy-health-meter');
     this.enemyHealthFill = document.getElementById('enemy-health-fill');
     this.enemyHealthValue = document.getElementById('enemy-health-value');
+    this.playerHealthMeter = document.getElementById('player-health-meter');
+    this.playerHealthFill = document.getElementById('player-health-fill');
+    this.playerHealthValue = document.getElementById('player-health-value');
     this.objective = document.getElementById('objective');
+    this.damageFlash = document.getElementById('damage-flash');
+    this.gameOverPanel = document.getElementById('game-over');
+    this.gameOverScore = document.getElementById('game-over-score');
+    this.gameOver = false;
+    this._downTime = 0;
+    this._lastFlash = 0;
     this._updateEnemyHud();
+    this._updatePlayerHud();
 
     this.input = new Input();
     this.followCam = new ThirdPersonCamera(this.camera, this.player.root, canvas, {
@@ -71,6 +82,13 @@ export class Game {
       punchButton: document.getElementById('punch-button'),
     });
     this.clock = new THREE.Clock();
+    this._idleInput = {
+      moveX: 0,
+      moveZ: 0,
+      sprint: false,
+      jumpPressed: false,
+      punchPressed: false,
+    };
     this._disposed = false;
 
     this._loop = this._loop.bind(this);
@@ -86,52 +104,40 @@ export class Game {
   _loop() {
     // Clamp dt so a paused/backgrounded tab doesn't teleport the player.
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    this._simTime += dt;
+    const canRetry = this.gameOver && !this.gameOverPanel.hidden;
+    if (canRetry && (this.input.restartPressed || this.input.punchPressed)) this._restart();
 
-    this.player.update(dt, this.input, this.camera, this.world);
+    this.player.update(
+      dt,
+      this.gameOver ? this._idleInput : this.input,
+      this.camera,
+      this.world
+    );
+    const respawned = this.enemyManager.update(dt, this.player, this.world);
 
-    const aliveEnemies = this._aliveEnemies();
-    const hitEnemy = this.combat.update(this.player, aliveEnemies, this._hudEnemy);
-    if (hitEnemy) {
-      this._hudEnemy = hitEnemy;
-      // Reinforce immediately when a target enters last-hit state.
-      if (hitEnemy.health === 1 && !hitEnemy.spawnedOnLastHit) {
-        hitEnemy.spawnedOnLastHit = true;
-        this._spawnEnemy({ nearPlayer: true });
+    if (!this.gameOver) {
+      const preferredEnemy = this._focusEnemy?.alive ? this._focusEnemy : null;
+      const result = this.combat.update(
+        this.player,
+        this.enemyManager.enemies,
+        preferredEnemy
+      );
+      if (result.hitEnemy) {
+        this._focusEnemy = result.hitEnemy;
+        if (result.hitEnemy.health === 1 && !result.hitEnemy.spawnedOnLastHit) {
+          result.hitEnemy.spawnedOnLastHit = true;
+          this.enemyManager.addReinforcement(this.player, this.world);
+        }
+        this._updateEnemyHud();
       }
-      if (!hitEnemy.alive) this.greenCodeBurst.play(hitEnemy.root.position);
+      if (result.defeatedEnemy) this.greenCodeBurst.play(result.hitEnemy.root.position);
+      if (result.playerHit) this._updatePlayerHud();
+      if (this.player.health === 0) this._endGame();
+      this.world.collide(this.player.root.position, this.player.collisionRadius);
     }
+    if (respawned) this._updateEnemyHud();
 
-    const aliveNow = this._aliveEnemies();
-    const attackSlots = aliveNow.length >= 4 ? 2 : 1;
-    const attackerIds = this._pickAttackers(aliveNow, attackSlots);
-    let orbitIndex = 0;
-    let strikeIndex = 0;
-
-    for (const enemy of aliveNow) {
-      const attacking = attackerIds.has(enemy.id);
-      const strikeRadius = Math.max(1.85, this.player.attackReach - 0.2);
-      enemy.update(dt, {
-        playerPosition: this.player.root.position,
-        attacking,
-        orbitIndex,
-        orbitCount: Math.max(aliveNow.length - attackerIds.size, 1),
-        strikeIndex,
-        strikeRadius,
-        time: this._simTime,
-      });
-      if (attacking) strikeIndex += 1;
-      else orbitIndex += 1;
-    }
-
-    for (const enemy of this.enemies) {
-      if (!enemy.alive) enemy.update(dt);
-    }
-
-    this._pruneDefeatedEnemies();
-    this._updateObjective(this._aliveEnemies().length, attackSlots);
-    this._updateEnemyHud();
-
+    this._updateDeathFade(dt);
     this.greenCodeBurst.update(dt);
     this.followCam.update(dt);
     this.renderer.render(this.scene, this.camera);
@@ -139,90 +145,68 @@ export class Game {
   }
 
   _updateEnemyHud() {
-    const enemy = this._selectHudEnemy();
-    const healthRatio = enemy ? enemy.health / enemy.maxHealth : 0;
+    let health = 0;
+    let maxHealth = 0;
+    for (const enemy of this.enemyManager.enemies) {
+      health += enemy.health;
+      maxHealth += enemy.maxHealth;
+    }
+    const healthRatio = maxHealth > 0 ? health / maxHealth : 0;
     this.enemyHealthFill.style.transform = `scaleX(${healthRatio})`;
-    this.enemyHealthValue.textContent = enemy
-      ? `${enemy.health} / ${enemy.maxHealth}`
-      : '0 / 3';
-    this.enemyHealthMeter.setAttribute('aria-valuenow', String(enemy ? enemy.health : 0));
-  }
-
-  _updateObjective(aliveCount, attackSlots) {
-    if (aliveCount === 0) {
-      this.objective.textContent = 'OBJECTIVE // TARGETS ELIMINATED';
-      return;
-    }
-    const slotLabel = attackSlots === 1 ? '1 SLOT' : '2 SLOTS';
+    this.enemyHealthValue.textContent =
+      `${this.enemyManager.aliveCount} ACTIVE / ${this.enemyManager.defeated} DOWN`;
+    this.enemyHealthMeter.setAttribute('aria-valuenow', String(health));
+    this.enemyHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
     this.objective.textContent =
-      `OBJECTIVE // SURVIVE CROWD (${aliveCount} AGENTS, ${slotLabel})`;
+      `OBJECTIVE // SURVIVE CROWD (${this.enemyManager.aliveCount} ACTIVE, ` +
+      `${this.enemyManager.maxAttackers} ATTACK SLOTS)`;
   }
 
-  _selectHudEnemy() {
-    if (this._hudEnemy?.alive) return this._hudEnemy;
-
-    const alive = this._aliveEnemies();
-    if (!alive.length) {
-      this._hudEnemy = null;
-      return null;
-    }
-
-    let nearest = alive[0];
-    let nearestDistSq = this.player.root.position.distanceToSquared(nearest.root.position);
-    for (let i = 1; i < alive.length; i += 1) {
-      const enemy = alive[i];
-      const distSq = this.player.root.position.distanceToSquared(enemy.root.position);
-      if (distSq < nearestDistSq) {
-        nearest = enemy;
-        nearestDistSq = distSq;
-      }
-    }
-
-    this._hudEnemy = nearest;
-    return nearest;
+  _updatePlayerHud() {
+    const { health, maxHealth } = this.player;
+    this.playerHealthFill.style.transform = `scaleX(${health / maxHealth})`;
+    this.playerHealthValue.textContent = `${health} / ${maxHealth}`;
+    this.playerHealthMeter.setAttribute('aria-valuenow', String(health));
+    this.playerHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
   }
 
-  _aliveEnemies() {
-    return this.enemies.filter((enemy) => enemy.alive);
+  _endGame() {
+    this.gameOver = true;
+    this._downTime = 0;
+    const count = this.enemyManager.defeated;
+    this.gameOverScore.textContent =
+      `${count} ${count === 1 ? 'AGENT' : 'AGENTS'} NEUTRALIZED`;
   }
 
-  _pickAttackers(aliveEnemies, attackSlots) {
-    const ranked = [...aliveEnemies].sort((a, b) => {
-      const distA = this.player.root.position.distanceToSquared(a.root.position);
-      const distB = this.player.root.position.distanceToSquared(b.root.position);
-      return distA - distB;
-    });
-    return new Set(ranked.slice(0, Math.min(attackSlots, ranked.length)).map((enemy) => enemy.id));
+  _restart() {
+    this.gameOver = false;
+    this._downTime = 0;
+    this._lastFlash = 0;
+    this.damageFlash.style.opacity = '0';
+    this.gameOverPanel.hidden = true;
+    this.player.reset();
+    this.player.root.position.copy(PLAYER_SPAWN);
+    this.player.root.rotation.y = PLAYER_SPAWN_YAW;
+    this.enemyManager.reset(ENEMY_SPAWN_CENTER);
+    this._focusEnemy = null;
+    this._updateEnemyHud();
+    this._updatePlayerHud();
   }
 
-  _spawnEnemy(opts = {}) {
-    const aliveCount = this._aliveEnemies().length;
-    if (aliveCount >= MAX_ACTIVE_AGENTS) return null;
-
-    const enemy = new Enemy({ id: this._enemyId++ });
-    const spawnRadius = opts.nearPlayer ? 9 : 11;
-    const angle = Math.random() * Math.PI * 2;
-    enemy.root.position.set(
-      this.player.root.position.x + Math.sin(angle) * spawnRadius,
-      0,
-      this.player.root.position.z + Math.cos(angle) * spawnRadius
+  _updateDeathFade(dt) {
+    if (!this.gameOver) return;
+    this._downTime += dt;
+    const rampIn = Math.min(this._downTime / DEATH_FLASH_IN, 1);
+    const fadeOut = Math.min(
+      Math.max(this._downTime - DEATH_REVEAL_DELAY, 0) / DEATH_FLASH_OUT,
+      1
     );
-    enemy.root.rotation.y = angle + Math.PI;
-
-    this.scene.add(enemy.root);
-    this.enemies.push(enemy);
-    if (!this._hudEnemy || !this._hudEnemy.alive) this._hudEnemy = enemy;
-    return enemy;
-  }
-
-  _pruneDefeatedEnemies() {
-    for (let i = this.enemies.length - 1; i >= 0; i -= 1) {
-      const enemy = this.enemies[i];
-      if (!enemy.deathComplete) continue;
-      if (this._hudEnemy === enemy) this._hudEnemy = null;
-      enemy.dispose();
-      this.enemies.splice(i, 1);
+    const intensity = rampIn * (1 - fadeOut);
+    if (intensity !== this._lastFlash) {
+      this._lastFlash = intensity;
+      this.damageFlash.style.opacity = (intensity * 0.75).toFixed(3);
     }
+    if (this._downTime >= DEATH_REVEAL_DELAY) this.gameOverPanel.hidden = false;
   }
 
   _onResize() {
@@ -244,7 +228,7 @@ export class Game {
       this.input.dispose();
       this.followCam.dispose();
       this.player.dispose();
-      this.enemies.forEach((enemy) => enemy.dispose());
+      this.enemyManager.dispose();
       this.greenCodeBurst.dispose();
       this.world.dispose();
       this.scene.clear();

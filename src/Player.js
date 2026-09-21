@@ -4,6 +4,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { AnimationController, STATE } from './AnimationController.js';
 
 const MOVEMENT_EPSILON = 0.01;
+const INVULNERABLE_DURATION = 0.6;
 const ATTACK_PROFILE = {
   fists: {
     duration: 0.42,
@@ -57,6 +58,9 @@ export class Player {
     this._t = 0; // animation clock (placeholder only)
     this._punchTime = ATTACK_PROFILE.fists.duration;
     this._punchHitConsumed = true;
+    this.maxHealth = opts.maxHealth ?? 5;
+    this.health = this.maxHealth;
+    this._invulnerableTime = 0;
 
     // Scratch vectors reused each frame (avoid per-frame allocation).
     this._forward = new THREE.Vector3();
@@ -290,6 +294,27 @@ export class Player {
     }
 
     this._punchTime = Math.min(this._punchTime + dt, profile.duration);
+    this._invulnerableTime = Math.max(0, this._invulnerableTime - dt);
+  }
+
+  takeDamage(amount) {
+    const acceptsHit = this.health > 0 && this._invulnerableTime <= 0 && amount > 0;
+    if (acceptsHit) {
+      this.health = Math.max(0, this.health - amount);
+      this._invulnerableTime = INVULNERABLE_DURATION;
+    }
+    return acceptsHit;
+  }
+
+  reset() {
+    this.health = this.maxHealth;
+    this._invulnerableTime = 0;
+    this.velocity.set(0, 0, 0);
+    this.velocityY = 0;
+    this.grounded = true;
+    this.state = STATE.IDLE;
+    this._punchTime = this._attackProfile.duration;
+    this._punchHitConsumed = true;
   }
 
   get punchActive() {

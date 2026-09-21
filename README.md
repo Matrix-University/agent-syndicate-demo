@@ -15,6 +15,11 @@ Vite opens `http://localhost:5173`. Move with **WASD / arrow keys**, **Shift** t
 sprint, **J** to punch, **Space** to jump. The character turns to face its direction
 of travel and switches between idle, walk/run, and one-shot action animations.
 
+You start near the garage elevator with five system agents closing in. At most
+two attack at once, reinforcements grow the crowd to seven, and defeated agents
+return after a short delay. Survive as long as possible, then press **R** or tap
+**HIT** to retry.
+
 On a touch device, use the **left stick** for camera-relative movement. Push it to
 the outer ring to sprint, drag open space on the right side to orbit the camera,
 and use the separate **JUMP** and **HIT** buttons for actions. Keyboard and mouse
@@ -42,8 +47,9 @@ src/main.js             boots the Game
 src/Game.js             renderer, scene, camera, the update loop
 src/World.js            lights, floor, grid, blockout pillars
 src/Player.js           the character: rig, movement, animation state machine
-src/Enemy.js            primitive enemy, health, hit reactions, defeat
-src/CombatSystem.js     punch range, facing, and one-hit resolution
+src/Enemy.js            primitive enemy, health, hit reactions, attack AI
+src/EnemyManager.js     crowd formation, attack slots, reinforcements, respawns
+src/CombatSystem.js     punch and enemy-strike hit resolution
 src/GreenCodeBurst.js   reusable enemy defeat particle effect
 src/ThirdPersonCamera.js smooth follow camera
 src/Input.js            keyboard + mobile gameplay input contract
@@ -52,7 +58,7 @@ src/MobileControls.js   touch joystick and action-button adapter
 
 The important architecture choice: `Player.root` is the thing that moves through
 the world (the camera follows it), and `Player.rig` is the visible body. Keeping
-them separate means you replace the *visuals* without touching the *movement*.
+them separate means you replace the _visuals_ without touching the _movement_.
 
 ## Swapping in a real character
 
@@ -82,8 +88,8 @@ movement code in `update()` is untouched. **Mixamo** also works — it exports
    the zero-asset primitive fallback.
 3. ✅ Add punch hit detection and one dummy enemy that takes damage and explodes
    into green code (a particle burst on death).
-4. ✅ Agents appear as soon as the current one is on a last hit, with an
-   "attack slot" limiter so only one or two strike at a time.
+4. ✅ A crowd encircles the player, limited to two active attackers, with
+   last-hit reinforcements, respawns, player health, and retry.
 5. Must be able pick up a car and throw it . For now only one car can be lifted. Pick a car by the entry ramp.
 
 ## Game Scenes

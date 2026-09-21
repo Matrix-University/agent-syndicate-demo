@@ -38,7 +38,7 @@ node .claude/skills/run-agent-syndicate-demo/driver.mjs smoke
 It boots the dev server on 127.0.0.1:5178, plays a real session, and checks:
 geometry renders, the player spawns at the EXIT end facing the ramp, the camera
 settles behind them, `W` drives them down the lane, an aimed punch damages an
-agent, and downing one spawns a last-hit reinforcement. Exit code 0 = all passed.
+agent, and dropping one to its last hit spawns a reinforcement. Exit code 0 = all passed.
 Screenshots land in `.run-shots/` (`01-spawn` … `04-reinforced`) — **open them**,
 a passing run with a black frame means the checks were too weak.
 
@@ -69,10 +69,10 @@ Key codes are the ones `Input.js` reads: `KeyW/A/S/D`, `KeyJ` (punch), `Space`
 without eyeballing pixels:
 
 ```json
-{"player":{"x":0,"y":0,"z":42,"yawDeg":180},"camera":{"x":0,"y":5.22,"z":45.41},
- "enemiesAlive":2,"enemyHealthTotal":6,"totalSpawned":2,"dying":0,
- "nearestEnemy":8,"objective":"OBJECTIVE // SURVIVE CROWD (2 AGENTS, 1 SLOT)",
- "enemyHealth":"3 / 3","frames":9,"tris":23764}
+{"player":{"x":-27.5,"y":0,"z":51,"yawDeg":180},"camera":{"x":-27.5,"y":5.22,"z":54.41},
+ "health":25,"enemiesAlive":5,"enemyHealthTotal":15,"totalSpawned":5,"dying":0,
+ "nearestEnemy":4.5,"objective":"OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)",
+ "enemyHealth":"5 ACTIVE / 0 DOWN","frames":9,"tris":23764}
 ```
 
 `eval <js>` runs arbitrary JS in the page; `window.__game` is the live `Game`

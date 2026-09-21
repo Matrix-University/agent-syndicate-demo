@@ -226,7 +226,7 @@ class Session {
   aim() {
     return this.cdp.eval(`(() => {
       const g = window.__game;
-      const alive = g.enemies.filter((e) => e.alive);
+      const alive = g.enemyManager.enemies.filter((e) => e.alive);
       if (!alive.length) return null;
       const p = g.player.root.position;
       let best = null, bestDist = Infinity;
@@ -278,16 +278,18 @@ class Session {
     return this.cdp.eval(`(() => {
       const g = window.__game;
       const p = g.player.root.position, c = g.camera.position;
+      const enemies = g.enemyManager.enemies;
       const round = (n) => Math.round(n * 100) / 100;
       return {
         player: { x: round(p.x), y: round(p.y), z: round(p.z),
                   yawDeg: Math.round(g.player.root.rotation.y * 180 / Math.PI) },
         camera: { x: round(c.x), y: round(c.y), z: round(c.z) },
-        enemiesAlive: g.enemies.filter((e) => e.alive).length,
-        enemyHealthTotal: g.enemies.reduce((sum, e) => sum + (e.alive ? e.health : 0), 0),
-        totalSpawned: g._enemyId - 1,
-        dying: g.enemies.filter((e) => !e.alive).length,
-        nearestEnemy: round(Math.min(...g.enemies.filter((e) => e.alive)
+        health: g.player.health,
+        enemiesAlive: enemies.filter((e) => e.alive).length,
+        enemyHealthTotal: enemies.reduce((sum, e) => sum + (e.alive ? e.health : 0), 0),
+        totalSpawned: enemies.length,
+        dying: enemies.filter((e) => !e.alive).length,
+        nearestEnemy: round(Math.min(...enemies.filter((e) => e.alive)
           .map((e) => e.root.position.distanceTo(p)), Infinity)),
         objective: document.getElementById('objective').textContent,
         enemyHealth: document.getElementById('enemy-health-value').textContent,

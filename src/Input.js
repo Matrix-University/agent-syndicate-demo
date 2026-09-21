@@ -100,6 +100,10 @@ export class Input {
   get jumpPressed() {
     return this.wasPressed('Space') || this._mobileJumpPressed;
   }
+
+  get restartPressed() {
+    return this.wasPressed('KeyR');
+  }
 }
 
 function clampAxis(value) {
