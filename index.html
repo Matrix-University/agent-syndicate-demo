@@ -86,6 +86,17 @@
         margin-top: 5px;
         color: var(--matrix-green);
       }
+      #lift-prompt {
+        margin-top: 6px;
+        padding: 3px 8px;
+        width: fit-content;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        background: rgba(8, 16, 12, 0.72);
+        color: var(--matrix-green);
+        font-size: 12px;
+        letter-spacing: 1px;
+      }
+      #lift-prompt[hidden] { display: none; }
       #damage-flash {
         position: fixed;
         inset: 0;
@@ -199,6 +210,11 @@
         right: max(22px, calc(env(safe-area-inset-right) + 14px));
         bottom: max(116px, calc(env(safe-area-inset-bottom) + 108px));
       }
+      #lift-button {
+        right: max(106px, calc(env(safe-area-inset-right) + 98px));
+        bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px));
+      }
+      .action-button.unavailable { opacity: 0.35; }
       @media (any-pointer: coarse) {
         #mobile-controls { display: block; }
         .desktop-help { display: none; }
@@ -217,6 +233,10 @@
         .action-button { width: 68px; height: 68px; }
         #jump-button {
           bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
+        }
+        #lift-button {
+          right: max(96px, calc(env(safe-area-inset-right) + 88px));
+          bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px));
         }
       }
       @media (max-width: 420px) {
@@ -243,9 +263,10 @@
       <div id="control-instructions" aria-live="polite">
       <span class="desktop-help">
         Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
-        Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; Esc — release mouse
+        Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; E — lift car<br />
+        J while carrying — throw &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; Esc — release mouse
       </span>
-      <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera</span>
+      <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera &nbsp;·&nbsp; LIFT — grab / throw the car</span>
       </div>
       <div id="combat-hud">
         <div class="hud-meter-label">
@@ -279,6 +300,7 @@
           <span id="enemy-health-fill" class="hud-meter-fill"></span>
         </div>
         <div id="objective">OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)</div>
+        <div id="lift-prompt" role="status" aria-live="polite" hidden></div>
       </div>
     </div>
     <div id="mobile-controls" aria-label="Touch controls">
@@ -287,6 +309,7 @@
       </div>
       <button id="jump-button" class="action-button" type="button" aria-label="Jump">JUMP</button>
       <button id="punch-button" class="action-button" type="button" aria-label="Punch">HIT</button>
+      <button id="lift-button" class="action-button unavailable" type="button" aria-label="Lift car" disabled>LIFT</button>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

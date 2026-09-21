@@ -33,6 +33,7 @@ index.html               canvas + HUD, loads src/main.js
 src/main.js              boots the Game
 src/Game.js              renderer, scene, camera, the update loop
 src/World.js             lights, floor, grid, blockout pillars
+src/LiftableCar.js       the one car the player can lift and throw
 src/Player.js            character: rig, movement, animation state machine
 src/ThirdPersonCamera.js smooth follow camera
 src/Input.js             keyboard state + movement axes
@@ -96,9 +97,9 @@ cool rim light, fog. Match it when adding world or character elements.
 ## Animation & gameplay states
 
 **Separation of concerns:** `Player` (`src/Player.js`) owns movement, vertical
-physics, and *intent* (locomotion state, punch, jump); `AnimationController`
-(`src/AnimationController.js`) owns all clip/mixer work. Player calls
-`anim.setLocomotion(state, speedFactor)`, `anim.playAction('punch')`,
+physics, and *intent* (locomotion state, punch, jump, carry/throw);
+`AnimationController` (`src/AnimationController.js`) owns all clip/mixer work.
+Player calls `anim.setLocomotion(state, speedFactor)`, `anim.playAction('punch')`,
 `anim.jumpTakeoff()` / `anim.jumpLand()`, `anim.update(dt)` — keep that boundary
 (don't reach into the mixer from `Player`).
 
@@ -126,17 +127,42 @@ to, and the 35 clips still unused in `models-src/UAL2_Standard.glb`. Check it fo
 existing clip before authoring a new move, and record any clip you add there.
 `npm run clips` (`scripts/list-clips.mjs`) regenerates its tables from the GLBs.
 
-**`Walk` and `Run` are authored by the bake, not shipped by the library** — UAL2
-has no neutral walk and no run, only `Walk_Carry_Loop` (real legs, arms locked in
-a carry pose). `scripts/lib/locomotion.mjs` keeps that clip's lower body and
-authors the upper body, then derives `Run` from it; the original survives as
-`Carry_Loop`, bound to `STATE.CARRY` but not selected by anything until carrying
-an object becomes a game state. Don't re-point `WALK` at the carry clip. The carry
-stance also tips the pelvis ~33° *back*, so the bake re-pitches the hips forward
-to a neutral read from `Idle_No_Loop` — straightening the spine alone leaves the
-character walking on its heels. Tune via
-the `WALK`/`RUN` constants there, re-bake, and check with
+**`Walk`, `Run`, the carry pair and the throw are authored by the bake, not shipped
+by the library** — UAL2 has no neutral walk, no run, nothing that holds a load
+*overhead*, and no two-handed throw; its only forward locomotion is
+`Walk_Carry_Loop` (real legs, arms locked in a chest-height carry pose) and its only
+throw is a one-armed grenade toss. Three recipe modules sit on the shared pose kit
+`scripts/lib/pose.mjs`:
+
+- `scripts/lib/locomotion.mjs` keeps the source's lower body and authors the upper
+  body as `Walk`, then derives `Run` from it. Don't re-point `WALK` at the carry clip.
+- `scripts/lib/carry.mjs` authors `Carry_Overhead_Loop` (over the same stride) and
+  `Carry_Overhead_Idle` (over `Idle_No_Loop`'s stance) with the arms **raised** — a
+  sign flip on `shoulderDrop` in `authorArms` — and the trunk leaned back under the load.
+- `scripts/lib/throw.mjs` authors `Throw_Overhead`, the car heave, over one frozen
+  frame of `Idle_No_Loop` (Player roots the character for the throw, so the feet
+  don't travel). Unlike the other two it authors *motion*: `TRACKS` keys every arm
+  and trunk value at five phases and splines them, and `authorArms`/`setHipPitch`
+  take the per-frame result. `RELEASE` in that table **must** stay at
+  `THROW_PROFILE.release / .duration` — it is the frame the car leaves the hands,
+  and the arms are authored to reach full extension exactly there.
+
+**The authored clips are additive — never overwrite a shipped clip to make room.**
+`Walk_Carry_Loop` is both an authoring source *and* a shipped clip (renamed
+`Carry_Loop` via `RENAME`); it stays bound to `STATE.CARRY`, selected by nothing,
+parked for a future carry-object state. That is why the overhead pair has its own
+names. The carry stance also tips the pelvis ~33° *back*,
+so the bake re-pitches the hips to a neutral read from `Idle_No_Loop` —
+straightening the spine alone leaves the character walking on its heels. Tune via
+the `WALK`/`RUN`/`CARRY` constants in those modules, re-bake, and check with
 `node scripts/inspect-locomotion.mjs` (arm/leg correlation should be near −1.00).
+`Throw_Overhead` is authored *to* `THROW_PROFILE`, so it plays at `clipRate` 1;
+check it with `node scripts/inspect-throw.mjs`, which reports it beside the parked
+library `Throw` (hand asymmetry near 0 = two hands on the car; the old one-armed
+clip scores 1.19m and reads as a punch). Beware `shoulderBias`: `authorArms`
+documents negative as forward, which holds for an arm at the side but **inverts**
+for a raised arm, so the throw's overhead keys use positive for forward.
+
 `setLocomotion`'s `speedFactor` is ground speed over the speed that state's clip
 was authored for — keep it per-state, or `Run` gets driven at the walk's rate. Shipped models go in `public/models/`;
 bake **inputs** live in `models-src/`. `.dispose()` what you swap out (`disposeObject`,
@@ -171,11 +197,42 @@ both engines (full detail in [docs/decentraland-asset-compat.md](docs/decentrala
   ≤10 s/300 frames, single clip, ≤3 MB). Treat as a separate deliverable, not the
   in-game character files.
 
+## Carrying and throwing
+
+`LiftableCar` (`src/LiftableCar.js`) is the one prop the player can pick up — the
+car in the bay `World` deliberately leaves empty by the entry ramp
+(`LIFTABLE_CAR_SLOT`). It cycles `grounded → carried → flying → settling →
+grounded`, and it **owns its own world collider**, registered through
+`world.addCollider()` and flagged `disabled` while carried or airborne so the thing
+you're holding isn't also a wall you walk into. `World.collide`/`groundHeight` skip
+disabled colliders — preserve that.
+
+Ownership is deliberately split, so keep it that way:
+
+- **`Game`** resolves the pickup (it is the only object that knows about both the
+  player and the car) and calls `player.startLift(car)`.
+- **`Player`** knows only "a prop" with `lift(player)` / `launch(direction)`, plus
+  an optional `throwPose(t)`. It owns the timing: rooted during the pickup and the
+  throw, and it releases the prop partway through the throw clip
+  (`THROW_PROFILE.release`), driving `throwPose` up to that point so the car tracks
+  the hands instead of hanging still while the arms swing under it.
+- **`LiftableCar`** owns its visuals, ballistics and collider; carrying reparents
+  it to `player.root` via `attach()` (world transform preserved), throwing
+  reparents it back to the scene.
+- **`CombatSystem.resolveThrownProp`** applies impact damage, alongside the other
+  hit resolution.
+
+While carrying, the attack input **throws** instead of punching, so touch controls
+need no extra button; jump and punch are unavailable until the car is gone.
+
 ## Input
 
 Keyboard state is a `Set` of `e.code` in `Input`, surfaced as axis getters
-(`moveX`, `moveZ`, `sprint`). Add new actions as getters there and read them in
+(`moveX`, `moveZ`, `sprint`) and edge-triggered intents (`punchPressed`,
+`jumpPressed`, `liftPressed`). Add new actions as getters there and read them in
 `Player.update`. Keys clear on window `blur` to avoid stuck movement — keep it.
+Touch action buttons are a data list in `MobileControls` (`this._actions`) — add a
+button there, not another branch.
 
 ## Code style
 

@@ -90,7 +90,9 @@ movement code in `update()` is untouched. **Mixamo** also works — it exports
    into green code (a particle burst on death).
 4. ✅ A crowd encircles the player, limited to two active attackers, with
    last-hit reinforcements, respawns, player health, and retry.
-5. Must be able pick up a car and throw it . For now only one car can be lifted. Pick a car by the entry ramp.
+5. ✅ Pick up a car and throw it. One car is liftable — the one parked by the
+   entry ramp. **E** grabs it, **J** heaves it; anything it ploughs through goes
+   down. It re-settles wherever it lands and can be picked up again.
 
 ## Game Scenes
 

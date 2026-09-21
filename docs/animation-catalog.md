@@ -36,9 +36,11 @@ and reviewable:
 The tier is a **per-clip decision, not a project-wide setting**. Start at P; move up
 only when the library clip is actually wrong for the game — that judgement, and its
 reason, is what the Notes column is for. `Walk`/`Run` are A because UAL2 ships
-neither; `Melee_Hook` is P because a hook punch is a hook punch.
+neither; the `Carry_Overhead_*` pair is A because nothing in it holds a load
+*overhead*; `Throw_Overhead` is A because the library's only throw is one-armed;
+`Melee_Hook` is P because a hook punch is a hook punch.
 
-## Shipped — `public/models/agent-dcl.glb` (10 clips)
+## Shipped — `public/models/agent-dcl.glb` (14 clips)
 
 The single asset the browser and Decentraland both load. Bindings live in
 `src/AnimationController.js`; intent lives in `src/Player.js`.
@@ -48,20 +50,59 @@ The single asset the browser and Decentraland both load. Bindings live in
 | `Idle_No_Loop` | 2.50s | P | `STATE.IDLE` | UAL2 `Idle_No_Loop` | Matched by fragment `idle_no` ahead of `idle`, so a prop idle can't win. Also the bake's **posture reference** — the neutral hip pitch `Walk`/`Run` are re-seated onto is measured from this clip. |
 | `Walk` | 0.95s | **A** | `STATE.WALK` | authored from `Walk_Carry_Loop` | Source's floor-locked lower body; spine carry-lean removed, hips re-pitched, arms/elbows/fingers authored fresh. `speedFactor` reference is `Player.speedWalk`. |
 | `Run` | 0.66s | **A** | `STATE.RUN` | authored from `Walk` | `Walk` with 1.35× leg swing, forward lean, bent-elbow pump, quicker cadence, feet re-locked to the floor. Reference is `Player.speedSprint`. |
-| `Carry_Loop` | 2.00s | P | `STATE.CARRY` (bound, never selected) | UAL2 `Walk_Carry_Loop`, renamed | The original carry walk, parked for a future carry-object state. Don't re-point `WALK` at it. |
-| `Melee_Hook` | 0.47s | P | `ACTIONS.punch` | UAL2 | Fired by `Input.punchPressed` (**J** / mobile button). Blocking one-shot. |
+| `Carry_Loop` | 2.00s | P | `STATE.CARRY` (bound, never selected) | UAL2 `Walk_Carry_Loop`, renamed | The library's chest-height carry walk, parked for a future carry-object state. Don't re-point `WALK` at it, and **don't overwrite it** to make room for a new carry clip. |
+| `Carry_Overhead_Loop` | 1.42s | **A** | `STATE.CARRY_OVERHEAD` | authored from `Walk_Carry_Loop` | Walking with a car overhead. Same lower body as `Walk`; arms **raised** (negative `shoulderDrop`), elbows braced, fingers gripping, trunk leaned back under the load. Retimed to `Player`'s carry walk speed. |
+| `Carry_Overhead_Idle` | 2.50s | **A** | `STATE.CARRY_OVERHEAD_IDLE` | authored from `Idle_No_Loop` | The standing half of the same hold — idle legs, identical arms. |
+| `Melee_Hook` | 0.47s | P | `ACTIONS.punch` | UAL2 | Fired by `Input.punchPressed` (**J** / mobile button), only when the hands are empty. Blocking one-shot. |
+| `Throw_Overhead` | 0.95s | **A** | `ACTIONS.throw` | authored over `Idle_No_Loop`'s stance | The car heave: two-handed, hold → wind-up → release → follow-through → neutral. Authored **to** `Player`'s `THROW_PROFILE`, so it plays at rate 1 and its forward extension lands on `release` (0.42s), the frame the prop leaves the hands. Bound by fragment `throw_overhead` **ahead of** `throw`, or the one-armed `Throw` below wins the substring match. |
+| `Throw` | 1.33s | P | *unbound* | UAL2 `OverhandThrow`, renamed | One-armed grenade toss. **Was** the car heave and read as a punch — the off hand stays at the hip while a chassis floats overhead (1.19m of hand-to-hand fore/aft asymmetry, against 0.08m for `Throw_Overhead`). Parked for a future one-handed throw; don't re-point `ACTIONS.throw` at it. |
 | `Melee_Hook_Rec` | 0.60s | P | *unbound* | UAL2 | Recovery half of the hook — for a combo window or whiff recovery. |
 | `Hit_Knockback` | 0.83s | P | *unbound* | UAL2 | Damage reaction; waiting on a hit/health system. |
 | `NinjaJump_Start` | 0.97s | P | `JUMP_CLIPS.start` | UAL2 | Takeoff. The sequence layers over `Player`'s vertical physics (clips are in-place). |
 | `NinjaJump_Idle_Loop` | 2.00s | P | `JUMP_CLIPS.air` | UAL2 | Airborne loop. |
 | `NinjaJump_Land` | 1.27s | P | `JUMP_CLIPS.land` | UAL2 | Landing flourish — **cancelable**: movement input or a new action ends it early. |
 
-Three of the ten (`Carry_Loop`, `Melee_Hook_Rec`, `Hit_Knockback`) ship but bind to
-nothing yet. Keyframes — not geometry — dominate this file's size, and Draco does
-not compress them, so drop anything from `KEEP` that isn't going to be wired up
-soon.
+Four of the fourteen (`Carry_Loop`, `Throw`, `Melee_Hook_Rec`, `Hit_Knockback`)
+ship but bind to nothing yet. Keyframes — not geometry — dominate this file's size, and
+Draco does not compress them, so drop anything from `KEEP` that isn't going to be
+wired up soon.
+
+**Authored clips are additive.** `Walk_Carry_Loop` is both the authoring source for
+`Walk`/`Run`/`Carry_Overhead_Loop` *and* a shipped clip in its own right (renamed
+`Carry_Loop`). A recipe that reuses a source must write a new name, never
+overwrite the source's shipped clip — verify with a clip-by-clip diff against the
+previous GLB after any bake that adds a clip.
 
 ## Authored recipes
+
+Three recipe modules sit on a shared pose kit,
+[`scripts/lib/pose.mjs`](../scripts/lib/pose.mjs) — the rig-level operations
+(`authorArms`, `setHipPitch`, `lockFeetToFloor`, `leanBones`, …) that all three use:
+
+| Module | Builds | Tune via |
+|---|---|---|
+| [`locomotion.mjs`](../scripts/lib/locomotion.mjs) | `Walk`, `Run` | the `WALK` / `RUN` constant blocks |
+| [`carry.mjs`](../scripts/lib/carry.mjs) | `Carry_Overhead_Loop`, `Carry_Overhead_Idle` | the `CARRY` constant block |
+| [`throw.mjs`](../scripts/lib/throw.mjs) | `Throw_Overhead` | the `TRACKS` keyframe table |
+
+The carry recipe is the locomotion recipe's trade run again for a different pose:
+keep the source's real lower body, author the upper body. The one thing that makes
+an overhead hold rather than a swinging arm is the **sign** of `shoulderDrop` —
+negative raises the arm out of its sideways bind pose instead of dropping it.
+
+The throw recipe goes one step further and authors *motion*, not a pose: the
+`shoulderDrop`/`elbowBase`/… values are keyed at five phases and splined, and
+`authorArms` takes the resulting per-frame config. Its lower body is one frozen
+frame of the idle, because `Player` roots the character for the whole throw — what
+sells the weight is the pelvis rocking back and then over (`setHipPitch` with a
+per-frame target, which keeps the legs planted while the trunk swings).
+
+**Watch the sign of `shoulderBias`.** `authorArms` documents negative as forward,
+and that is true of an arm hanging at the side — but the same rotation carries a
+**raised** arm the other way, so the throw's overhead keys use positive for
+forward. Getting this backwards produces a clip that wind-ups forward and releases
+backward, which the inspector catches as a forward peak on the wrong side of the
+release.
 
 `Walk` and `Run` are built by [`scripts/lib/locomotion.mjs`](../scripts/lib/locomotion.mjs),
 called from the bake. Tune the feel via the `WALK` / `RUN` constant blocks at the
@@ -76,7 +117,20 @@ side). Two ordering rules bite if the recipe is rearranged — `setHipPitch` bef
 `authorArms`, and the run's leg exaggeration about the clip's own mean pose — both
 explained in [baking-animations.md](./baking-animations.md#walk-and-run-are-authored-not-copied).
 
-## The shelf — `models-src/UAL2_Standard.glb` (43 clips, 35 unused)
+`Throw_Overhead` has its own inspector, which traces where the hands actually go:
+
+```bash
+node scripts/inspect-throw.mjs models-src/agent-animated.glb
+```
+
+With no clip named it reports `Throw_Overhead` **and** `Throw` side by side, which
+is the fastest way to see why the library clip was wrong for this move. What to
+look for: hand **asymmetry** near zero (both hands on the car, not one cocked back
+like a jab), the forward **peak** landing at or just after the 0.42s release, and
+**trunk** fold staying under ~55° — past that it stops reading as a heave and
+starts reading as a bow.
+
+## The shelf — `models-src/UAL2_Standard.glb` (43 clips, 34 unused)
 
 Everything the library offers that isn't baked yet. **These clips are bone channels
 only** — the bake disposes the library's meshes and skins, so a "sword", "shield",
@@ -98,7 +152,6 @@ shaped around something that isn't there.
 | `Shield_Dash` | 1.10s | Shoulder charge. |
 | `Shield_OneShot` | 0.83s | Bash / shove. |
 | `Idle_Shield_Break` | 1.07s | Guard-break reaction. |
-| `OverhandThrow` | 1.33s | Throw (roadmap: *Counter throw* base). |
 | `Zombie_Scratch` | 1.80s | Wild swipe — enemy attack. |
 
 Nothing here is a **kick**. Front kick, side kick, roundhouse and leg sweep — MVP
@@ -121,7 +174,6 @@ be authored (tier A) or imported from another same-rig pack.
 | `Idle_Shield_Loop` | 2.50s | **Combat idle** (roadmap MVP) — hands already up and guarded. |
 | `Idle_FoldArms_Loop` | 2.50s | Waiting NPC. |
 | `Idle_Rail_Loop` / `_Call` | 2.50 / 2.50s | Leaning NPC, plus a beckon. |
-| `Idle_Lantern_Loop` | 2.50s | Holding-something idle. |
 | `Idle_TalkingPhone_Loop` | 2.93s | Phone idle — on-theme for the setting. |
 | `Zombie_Idle_Loop` | 1.33s | Enemy idle. |
 | `A_TPose` | 2.50s | Reference pose, not an animation. Never bake it. |

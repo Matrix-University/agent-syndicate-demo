@@ -10,6 +10,7 @@ export class Input {
     this._mobileSprint = false;
     this._mobilePunchPressed = false;
     this._mobileJumpPressed = false;
+    this._mobileLiftPressed = false;
 
     this._onKeyDown = (e) => {
       if (!this.keys.has(e.code)) this._pressed.add(e.code); // ignore auto-repeat
@@ -37,6 +38,7 @@ export class Input {
     this._pressed.clear();
     this._mobilePunchPressed = false;
     this._mobileJumpPressed = false;
+    this._mobileLiftPressed = false;
   }
 
   setMobileMovement(moveX, moveZ, sprint) {
@@ -59,12 +61,17 @@ export class Input {
     this._mobileJumpPressed = true;
   }
 
+  triggerMobileLift() {
+    this._mobileLiftPressed = true;
+  }
+
   reset() {
     this.keys.clear();
     this._pressed.clear();
     this.resetMobileMovement();
     this._mobilePunchPressed = false;
     this._mobileJumpPressed = false;
+    this._mobileLiftPressed = false;
   }
 
   dispose() {
@@ -99,6 +106,11 @@ export class Input {
 
   get jumpPressed() {
     return this.wasPressed('Space') || this._mobileJumpPressed;
+  }
+
+  // Pick up whatever liftable prop is in range.
+  get liftPressed() {
+    return this.wasPressed('KeyE') || this._mobileLiftPressed;
   }
 
   get restartPressed() {

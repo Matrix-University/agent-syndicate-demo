@@ -30,7 +30,8 @@ const HEADED = process.argv.includes('--headed');
 const KEYS = {
   KeyW: { key: 'w', vk: 87 }, KeyA: { key: 'a', vk: 65 },
   KeyS: { key: 's', vk: 83 }, KeyD: { key: 'd', vk: 68 },
-  KeyJ: { key: 'j', vk: 74 },
+  KeyJ: { key: 'j', vk: 74 }, KeyE: { key: 'e', vk: 69 },
+  KeyR: { key: 'r', vk: 82 },
   Space: { key: ' ', vk: 32 },
   ShiftLeft: { key: 'Shift', vk: 16, modifiers: 8 },
   ArrowUp: { key: 'ArrowUp', vk: 38 }, ArrowDown: { key: 'ArrowDown', vk: 40 },

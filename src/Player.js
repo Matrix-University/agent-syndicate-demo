@@ -15,6 +15,17 @@ const ATTACK_PROFILE = {
   },
 };
 
+// Heaving a car overhead: a rooted pickup, then a rooted throw whose `release`
+// is the frame the prop leaves the hands. Throw_Overhead is authored to exactly
+// this beat with its extension on `release` (scripts/lib/throw.mjs), so it needs
+// no retiming — `clipRate` stays as the knob for binding a differently-timed clip.
+const LIFT_DURATION = 0.45;
+const THROW_PROFILE = { duration: 0.95, release: 0.42, clipRate: 1 };
+
+// Carrying is heavy: locomotion caps well under the empty-handed speeds.
+const CARRY_SPEED_WALK = 4;
+const CARRY_SPEED_SPRINT = 7.5;
+
 // The playable character.
 //   root  -> moves through the world (this is what the camera follows)
 //   rig   -> the visible body; a Quaternius CC0 GLB when present, else primitives
@@ -58,6 +69,14 @@ export class Player {
     this._t = 0; // animation clock (placeholder only)
     this._punchTime = ATTACK_PROFILE.fists.duration;
     this._punchHitConsumed = true;
+
+    // Carried prop (a LiftableCar). Player only needs lift(player)/launch(dir)
+    // from it — it owns its own visuals, physics and collider.
+    this.carry = null;
+    this._liftTime = LIFT_DURATION;
+    this._throwTime = THROW_PROFILE.duration;
+    this._throwReleased = true;
+    this._throwDir = new THREE.Vector3();
     this.maxHealth = opts.maxHealth ?? 5;
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
@@ -204,21 +223,36 @@ export class Player {
     const moving = movementMagnitude > MOVEMENT_EPSILON;
     if (moving) this._move.normalize();
 
+    // With both hands full the attack input becomes the throw, so touch controls
+    // need no extra button and the fists are unavailable until the car is gone.
+    // The lift intent throws too: the HUD prompt and the relabelled touch button
+    // both offer LIFT/THROW, and Game only spends liftPressed on a pickup when
+    // the hands are empty, so the two readings can't collide.
+    const carrying = this.carrying;
+    if (carrying && (input.punchPressed || input.liftPressed)) this.startThrow();
+    const lifting = this._liftTime < LIFT_DURATION;
+    const throwing = this._throwTime < THROW_PROFILE.duration;
+    const handsFull = carrying || lifting || throwing;
+
     // Give jump priority when both one-shot inputs arrive on the same frame.
-    const wantsJump = input.jumpPressed && this.grounded;
+    const wantsJump = input.jumpPressed && this.grounded && !handsFull;
     const profile = this._attackProfile;
     const punchReady = this._punchTime >= profile.duration && !this.anim?.acting;
-    const startsPunch = punchReady && input.punchPressed && !wantsJump && this.grounded;
+    const startsPunch = punchReady && input.punchPressed && !wantsJump &&
+      this.grounded && !handsFull;
     if (startsPunch) {
       this._punchTime = 0;
       this._punchHitConsumed = false;
       this.anim?.playAction('punch');
     }
 
-    // Horizontal movement — rooted while a blocking action (punch) plays.
+    // Horizontal movement — rooted while a blocking action (punch, pickup, throw)
+    // plays. Carrying doesn't root, it just slows you down.
     const punching = this._punchTime < profile.duration;
-    const rooted = punching || !!this.anim?.acting;
-    const speed = input.sprint ? this.speedSprint : this.speedWalk;
+    const rooted = punching || lifting || throwing || !!this.anim?.acting;
+    const speed = carrying
+      ? (input.sprint ? CARRY_SPEED_SPRINT : CARRY_SPEED_WALK)
+      : (input.sprint ? this.speedSprint : this.speedWalk);
 
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
     const active = moving && !rooted;
@@ -236,7 +270,7 @@ export class Player {
     // Vertical movement: jump impulse + gravity, floor at y = 0. Jump from the
     // ground only and not mid-action; `jumpPressed` is already edge-detected.
     let justTookOff = false;
-    if (input.jumpPressed && this.grounded && !rooted) {
+    if (wantsJump && !rooted) {
       this.velocityY = this.jumpSpeed;
       this.grounded = false;
       justTookOff = true;
@@ -277,7 +311,9 @@ export class Player {
     const horizontalSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     const locomoting = horizontalSpeed > 0.1;
     const running = horizontalSpeed > this.speedWalk * 1.35;
-    this.state = locomoting ? (running ? STATE.RUN : STATE.WALK) : STATE.IDLE;
+    this.state = this.carrying
+      ? (locomoting ? STATE.CARRY_OVERHEAD : STATE.CARRY_OVERHEAD_IDLE)
+      : (locomoting ? (running ? STATE.RUN : STATE.WALK) : STATE.IDLE);
 
     if (this.anim) {
       if (justTookOff) this.anim.jumpTakeoff();
@@ -285,7 +321,11 @@ export class Player {
       // Rate each clip against the speed it was authored for. Run is its own clip
       // now rather than a sped-up walk, so measuring it against speedWalk would
       // drive it at up to 2.75x and turn the stride into a scramble.
-      const reference = this.state === STATE.RUN ? this.speedSprint : this.speedWalk;
+      // Carry_Overhead_Loop is authored at the carry walk pace, so it rates
+      // against that speed, not the empty-handed one (speedFactor is per-state).
+      const reference = this.state === STATE.RUN ? this.speedSprint
+        : this.state === STATE.CARRY_OVERHEAD ? CARRY_SPEED_WALK
+        : this.speedWalk;
       // setLocomotion is a no-op while the controller is airborne/acting.
       this.anim.setLocomotion(this.state, horizontalSpeed / reference);
       this.anim.update(dt);
@@ -294,7 +334,65 @@ export class Player {
     }
 
     this._punchTime = Math.min(this._punchTime + dt, profile.duration);
+    this._liftTime = Math.min(this._liftTime + dt, LIFT_DURATION);
+    this._throwTime = Math.min(this._throwTime + dt, THROW_PROFILE.duration);
+    // Carry the prop through the heave so it tracks the hands instead of hanging
+    // still while the arms swing under it. Only runs mid-throw: _throwReleased is
+    // true whenever the character is just holding the thing.
+    if (this.carry && !this._throwReleased) {
+      this.carry.throwPose?.(this._throwTime / THROW_PROFILE.release);
+    }
+    this._releaseCarry(); // after the timer advance, so the release lands on cue
     this._invulnerableTime = Math.max(0, this._invulnerableTime - dt);
+  }
+
+  get carrying() {
+    return !!this.carry;
+  }
+
+  // True while a pickup or throw is playing — Game suppresses the lift prompt.
+  get busyWithProp() {
+    return this._liftTime < LIFT_DURATION || this._throwTime < THROW_PROFILE.duration;
+  }
+
+  // Take hold of a liftable prop. It only has to offer lift(player)/launch(dir).
+  startLift(prop) {
+    const canLift = !this.carry && this.grounded && !this.busyWithProp &&
+      this._punchTime >= this._attackProfile.duration && !this.anim?.acting;
+    if (!canLift) return false;
+    this.carry = prop;
+    this._liftTime = 0;
+    prop.lift(this);
+    return true;
+  }
+
+  // Heave it: the prop leaves the hands partway through the clip (_releaseCarry).
+  startThrow() {
+    const canThrow = !!this.carry && !this.busyWithProp;
+    if (!canThrow) return false;
+    this._throwTime = 0;
+    this._throwReleased = false;
+    this.anim?.playAction('throw', THROW_PROFILE.clipRate);
+    return true;
+  }
+
+  // Hand the prop back without throwing it (death, retry).
+  dropCarry() {
+    this.carry = null;
+    this._liftTime = LIFT_DURATION;
+    this._throwTime = THROW_PROFILE.duration;
+    this._throwReleased = true;
+  }
+
+  _releaseCarry() {
+    const releases = !this._throwReleased && this._throwTime >= THROW_PROFILE.release;
+    if (!releases) return;
+    this._throwReleased = true;
+    const prop = this.carry;
+    this.carry = null;
+    // Facing is the throw direction — same forward convention as CombatSystem.
+    this._throwDir.set(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y));
+    prop?.launch(this._throwDir);
   }
 
   takeDamage(amount) {
@@ -307,6 +405,7 @@ export class Player {
   }
 
   reset() {
+    this.dropCarry();
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
     this.velocity.set(0, 0, 0);
@@ -353,7 +452,18 @@ export class Player {
   // or it failed to load). Real clips are driven by the AnimationController above.
   _animate(dt, intensity) {
     const punching = this._punchTime < this._attackProfile.duration;
-    if (punching) {
+    if (this.carrying || !this._throwReleased) {
+      // Zero-asset fallback: no carry clip to play, so just hold the arms up.
+      this._t += dt * (4 + intensity * 4);
+      const swing = Math.sin(this._t) * 0.5 * intensity;
+      this.armL.rotation.x = -Math.PI * 0.85;
+      this.armR.rotation.x = -Math.PI * 0.85;
+      this.armR.rotation.z = 0;
+      this.legL.rotation.x = swing;
+      this.legR.rotation.x = -swing;
+      this.torso.rotation.y = 0;
+      this.torso.position.y = 2.0;
+    } else if (punching) {
       const progress = this._punchTime / this._attackProfile.duration;
       const extension = Math.sin(progress * Math.PI);
       const recoil = Math.sin(progress * Math.PI * 2) * 0.12;

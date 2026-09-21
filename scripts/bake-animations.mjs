@@ -16,6 +16,8 @@ import { NodeIO } from '@gltf-transform/core';
 import { prune, dedup, resample, mergeDocuments } from '@gltf-transform/functions';
 import { buildSkeleton } from './lib/skeleton.mjs';
 import { synthesizeLocomotion } from './lib/locomotion.mjs';
+import { synthesizeCarry } from './lib/carry.mjs';
+import { synthesizeThrow } from './lib/throw.mjs';
 
 // Inputs live in models-src/ (not served to the browser); only the final baked
 // asset is written into public/models/.
@@ -24,21 +26,35 @@ const [, , CHAR = 'models-src/agent.glb',
   OUT = 'models-src/agent-animated.glb'] = process.argv;
 const KEEP_ALL = process.argv.includes('--all');
 
-// The clip Walk and Run are authored from (see scripts/lib/locomotion.mjs).
+// The clips Walk/Run (locomotion.mjs) and the Carry_Overhead pair (carry.mjs) are
+// authored from these. Both sources also SHIP in their own right — the authored
+// clips are additive, so nothing that was in the file before is replaced.
 const LOCOMOTION_SOURCE = 'Walk_Carry_Loop';
-const SYNTHESIZED = ['Walk', 'Run'];
+const POSTURE_SOURCE = 'Idle_No_Loop';
+const SYNTHESIZED = [
+  'Walk', 'Run', 'Carry_Overhead_Loop', 'Carry_Overhead_Idle', 'Throw_Overhead',
+];
 
 // Clips to embed (by exact name). Curated for the brawler: idle, locomotion, an
 // attack pair, and a hit reaction. Edit this list or pass --all.
 const KEEP = new Set([
   'Idle_No_Loop',
-  'Walk_Carry_Loop', // source for the synthesized Walk/Run; kept as Carry_Loop
+  'Walk_Carry_Loop', // ships as Carry_Loop, and is the Walk/Run/carry authoring source
   'Melee_Hook',
   'Melee_Hook_Rec',
   'Hit_Knockback',
+  'OverhandThrow',   // ships as Throw; the car heave is the authored Throw_Overhead
   'NinjaJump_Start',
   'NinjaJump_Idle_Loop',
   'NinjaJump_Land',
+]);
+
+// Library name -> shipped name. Renaming here is what keeps state names and clip
+// names aligned (DCL's Animator matches a clip name exactly), and keeps the
+// loose substring match in AnimationController unambiguous.
+const RENAME = new Map([
+  ['Walk_Carry_Loop', 'Carry_Loop'],
+  ['OverhandThrow', 'Throw'],
 ]);
 
 for (const path of [CHAR, LIB]) {
@@ -114,8 +130,6 @@ for (const node of charRoot.listNodes()) {
 // body, then keep the original as Carry_Loop for the future carry-object state.
 const skeleton = buildSkeleton(charRoot);
 const stats = synthesizeLocomotion(charDoc, skeleton, LOCOMOTION_SOURCE);
-const carry = charRoot.listAnimations().find((a) => a.getName() === LOCOMOTION_SOURCE);
-if (carry) carry.setName('Carry_Loop');
 console.log(
   `Synthesized Walk + Run from ${LOCOMOTION_SOURCE} ` +
   `(${stats.frames} frames, ±${stats.amplitudeDeg.toFixed(1)}° thigh swing about ` +
@@ -123,6 +137,34 @@ console.log(
   `${stats.hipPitchDeg.toFixed(1)}° neutral; foot-lock shifted the pelvis by up to ` +
   `${(stats.footLockMaxLift * 100).toFixed(1)}cm).`
 );
+
+// The same library holds nothing that carries a load *overhead*, so the carry
+// pair is authored too — the source's legs under authored arms.
+const carryStats = synthesizeCarry(
+  charDoc, skeleton, LOCOMOTION_SOURCE, POSTURE_SOURCE
+);
+console.log(
+  `Synthesized ${carryStats.clips.map((c) => c.name).join(' + ')} (hips leaned back ` +
+  `to ${carryStats.hipPitchDeg.toFixed(1)}°; foot-lock shifted the pelvis by up to ` +
+  `${(Math.max(...carryStats.clips.map((c) => c.footLockMaxLift)) * 100).toFixed(1)}cm).`
+);
+
+// Nothing in the library heaves a load off the head — its only throw is a
+// one-armed grenade toss — so the car throw is authored over the idle's stance.
+const throwStats = synthesizeThrow(charDoc, skeleton, POSTURE_SOURCE);
+console.log(
+  `Synthesized ${throwStats.name} (${throwStats.frames} frames over ` +
+  `${throwStats.duration}s, release at ${throwStats.releaseAt.toFixed(2)}s; ` +
+  `foot-lock shifted the pelvis by up to ` +
+  `${(throwStats.footLockMaxLift * 100).toFixed(1)}cm).`
+);
+
+// Ship the library clips under their stable names. Runs after synthesis so the
+// recipes can still find their sources by the library's original names.
+for (const anim of charRoot.listAnimations()) {
+  const renamed = RENAME.get(anim.getName());
+  if (renamed) anim.setName(renamed);
+}
 
 // resample() losslessly drops redundant keyframes (big animation win); prune and
 // dedup clean orphaned/duplicate data left by the merge.

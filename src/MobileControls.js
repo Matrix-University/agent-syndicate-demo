@@ -11,10 +11,9 @@ export class MobileControls {
     this.thumb = elements.thumb;
     this.jumpButton = elements.jumpButton;
     this.punchButton = elements.punchButton;
+    this.liftButton = elements.liftButton;
 
     this._joystickPointerId = null;
-    this._jumpPointerId = null;
-    this._punchPointerId = null;
     this._joystickCenterX = 0;
     this._joystickCenterY = 0;
     this._sprinting = false;
@@ -25,10 +24,19 @@ export class MobileControls {
     this._onJoystickDown = (event) => this._claimJoystick(event);
     this._onJoystickMove = (event) => this._moveJoystick(event);
     this._onJoystickEnd = (event) => this._releaseJoystick(event.pointerId);
-    this._onJumpDown = (event) => this._claimAction(event, 'jump');
-    this._onJumpEnd = (event) => this._releaseAction(event.pointerId, 'jump');
-    this._onPunchDown = (event) => this._claimAction(event, 'punch');
-    this._onPunchEnd = (event) => this._releaseAction(event.pointerId, 'punch');
+    // One entry per action button, so adding a button (LIFT) is data, not another
+    // branch through _claimAction/_releaseAction.
+    this._actions = [
+      { button: this.jumpButton, trigger: () => this.input.triggerMobileJump() },
+      { button: this.punchButton, trigger: () => this.input.triggerMobilePunch() },
+      { button: this.liftButton, trigger: () => this.input.triggerMobileLift() },
+    ].filter((action) => !!action.button);
+    for (const action of this._actions) {
+      action.pointerId = null;
+      action.onDown = (event) => this._claimAction(event, action);
+      action.onEnd = (event) => this._releaseAction(event.pointerId, action);
+    }
+
     this._onBlur = () => this.reset();
     this._onVisibilityChange = () => {
       if (document.hidden) this.reset();
@@ -46,8 +54,21 @@ export class MobileControls {
     this.joystick.addEventListener('pointercancel', this._onJoystickEnd);
     this.joystick.addEventListener('lostpointercapture', this._onJoystickEnd);
 
-    this._addActionListeners(this.jumpButton, this._onJumpDown, this._onJumpEnd);
-    this._addActionListeners(this.punchButton, this._onPunchDown, this._onPunchEnd);
+    for (const action of this._actions) {
+      this._addActionListeners(action.button, action.onDown, action.onEnd);
+    }
+  }
+
+  // Dim the LIFT button when there is nothing to grab, and relabel it once the
+  // car is overhead — the same button throws.
+  setLiftState(enabled, label) {
+    if (!this.liftButton) return;
+    this.liftButton.disabled = !enabled;
+    this.liftButton.classList.toggle('unavailable', !enabled);
+    if (this.liftButton.textContent !== label) {
+      this.liftButton.textContent = label;
+      this.liftButton.setAttribute('aria-label', label);
+    }
   }
 
   _addActionListeners(button, onDown, onEnd) {
@@ -110,33 +131,25 @@ export class MobileControls {
   }
 
   _claimAction(event, action) {
-    const pointerKey = action === 'jump' ? '_jumpPointerId' : '_punchPointerId';
-    const button = action === 'jump' ? this.jumpButton : this.punchButton;
-
-    if (this[pointerKey] === null) {
-      this[pointerKey] = event.pointerId;
-      button.setPointerCapture(event.pointerId);
-      button.classList.add('active');
-      if (action === 'jump') this.input.triggerMobileJump();
-      else this.input.triggerMobilePunch();
+    if (action.pointerId === null && !action.button.disabled) {
+      action.pointerId = event.pointerId;
+      action.button.setPointerCapture(event.pointerId);
+      action.button.classList.add('active');
+      action.trigger();
       event.preventDefault();
     }
   }
 
   _releaseAction(pointerId, action) {
-    const pointerKey = action === 'jump' ? '_jumpPointerId' : '_punchPointerId';
-    const button = action === 'jump' ? this.jumpButton : this.punchButton;
-
-    if (pointerId === this[pointerKey]) {
-      this[pointerKey] = null;
-      button.classList.remove('active');
+    if (pointerId === action.pointerId) {
+      action.pointerId = null;
+      action.button.classList.remove('active');
     }
   }
 
   reset() {
     this._releaseJoystick(this._joystickPointerId);
-    this._releaseAction(this._jumpPointerId, 'jump');
-    this._releaseAction(this._punchPointerId, 'punch');
+    for (const action of this._actions) this._releaseAction(action.pointerId, action);
     this.input.reset();
   }
 
@@ -153,7 +166,8 @@ export class MobileControls {
     this.joystick.removeEventListener('pointercancel', this._onJoystickEnd);
     this.joystick.removeEventListener('lostpointercapture', this._onJoystickEnd);
 
-    this._removeActionListeners(this.jumpButton, this._onJumpDown, this._onJumpEnd);
-    this._removeActionListeners(this.punchButton, this._onPunchDown, this._onPunchEnd);
+    for (const action of this._actions) {
+      this._removeActionListeners(action.button, action.onDown, action.onEnd);
+    }
   }
 }

@@ -5,12 +5,38 @@ const CONTACT_EPSILON_SQ = 1e-6;
 const CLOSE_RANGE_BONUS_RADIUS_SQ = 1.35 * 1.35;
 const RANGE_TOLERANCE = 0.2;
 const STRIKE_FACING_DOT = 0.35;
+// A thrown car only sweeps agents once it is low enough to hit a standing body.
+const PROP_STRIKE_HEIGHT = 3.4;
 
 export class CombatSystem {
   constructor() {
     this._toEnemy = new THREE.Vector3();
     this._forward = new THREE.Vector3();
     this._result = { hitEnemy: null, defeatedEnemy: false, playerHit: false };
+    this._propDefeated = [];
+  }
+
+  // A prop in flight (the thrown car) ploughing through the crowd. Each agent is
+  // hit at most once per throw — the prop tracks that, since it owns the flight.
+  // Returns the agents this call defeated (a reused array).
+  resolveThrownProp(prop, enemies) {
+    this._propDefeated.length = 0;
+    if (!prop?.flying || prop.root.position.y > PROP_STRIKE_HEIGHT) {
+      return this._propDefeated;
+    }
+
+    const radiusSq = prop.impactRadius * prop.impactRadius;
+    for (const enemy of enemies) {
+      if (!enemy.alive || prop.hasStruck(enemy)) continue;
+      this._toEnemy.subVectors(enemy.root.position, prop.root.position);
+      this._toEnemy.y = 0;
+      if (this._toEnemy.lengthSq() > radiusSq) continue;
+
+      prop.markStruck(enemy);
+      enemy.takeDamage(prop.impactDamage);
+      if (!enemy.alive) this._propDefeated.push(enemy);
+    }
+    return this._propDefeated;
   }
 
   update(player, enemies, preferredEnemy = null) {

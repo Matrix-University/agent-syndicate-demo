@@ -62,8 +62,9 @@ node .claude/skills/run-agent-syndicate-demo/driver.mjs script /tmp/drive.txt
 
 Commands: `state` · `aim` · `engage [tries]` · `hold <Code> <ms>` ·
 `press <Code>` · `wait <ms>` · `shot <name>` · `eval <js>` · `nav [url]` · `quit`.
-Key codes are the ones `Input.js` reads: `KeyW/A/S/D`, `KeyJ` (punch), `Space`
-(jump), `ShiftLeft` (sprint), arrows.
+Key codes are the ones `Input.js` reads: `KeyW/A/S/D`, `KeyJ` (punch / throw the
+carried car), `KeyE` (lift the car), `Space` (jump), `ShiftLeft` (sprint),
+`KeyR` (retry), arrows.
 
 `state` returns live engine values, which is how you verify a gameplay change
 without eyeballing pixels:

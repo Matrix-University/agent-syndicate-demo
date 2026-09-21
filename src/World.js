@@ -17,6 +17,11 @@ const CAR_MODELS = [
   '/models/vehicles/suv.glb',
 ];
 
+// The one parking bay left empty for the liftable car (LiftableCar owns the mesh
+// and the collider there). It is the bay nearest the entry ramp, so the pickup is
+// a landmark you run *to* rather than something underfoot at spawn.
+export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -20.15, z: -44, yaw: Math.PI / 2 });
+
 // Resolves the player against static garage geometry as a circle on the ground.
 export class World {
   constructor(root, colliders) {
@@ -25,8 +30,21 @@ export class World {
     this.disposed = false;
   }
 
+  // Dynamic colliders (a liftable car) register here and mutate their own entry —
+  // position, extents, and `disabled` while they are carried or in flight.
+  addCollider(collider) {
+    this.colliders.push(collider);
+    return collider;
+  }
+
+  removeCollider(collider) {
+    const index = this.colliders.indexOf(collider);
+    if (index !== -1) this.colliders.splice(index, 1);
+  }
+
   collide(pos, radius) {
     for (const collider of this.colliders) {
+      if (collider.disabled) continue; // e.g. a car that is being carried or is mid-throw
       const clearsCollider = collider.height !== undefined && pos.y >= collider.height;
       if (clearsCollider) continue;
 
@@ -73,7 +91,7 @@ export class World {
   groundHeight(pos) {
     let height = 0;
     for (const collider of this.colliders) {
-      const standable = collider.height !== undefined &&
+      const standable = !collider.disabled && collider.height !== undefined &&
         Math.abs(pos.x - collider.x) <= collider.hx &&
         Math.abs(pos.z - collider.z) <= collider.hz;
       if (standable) height = Math.max(height, collider.height);
@@ -360,7 +378,7 @@ export function buildWorld(scene) {
   }
 
   const parkedCars = [
-    [-20.15, -44], [20.15, -36], [-20.15, -28], [20.15, -20],
+    [20.15, -36], [-20.15, -28], [20.15, -20],
     [-20.15, 4], [20.15, 12], [-20.15, 20], [20.15, 36], [-20.15, 44],
   ];
   parkedCars.forEach(([x, z]) => {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWorld } from './World.js';
+import { buildWorld, LIFTABLE_CAR_SLOT } from './World.js';
 import { Player } from './Player.js';
 import { ThirdPersonCamera } from './ThirdPersonCamera.js';
 import { Input } from './Input.js';
@@ -7,6 +7,7 @@ import { MobileControls } from './MobileControls.js';
 import { EnemyManager } from './EnemyManager.js';
 import { CombatSystem } from './CombatSystem.js';
 import { GreenCodeBurst } from './GreenCodeBurst.js';
+import { LiftableCar } from './LiftableCar.js';
 
 const PLAYER_SPAWN = new THREE.Vector3(-27.5, 0, 51);
 const PLAYER_SPAWN_YAW = Math.PI;
@@ -48,6 +49,9 @@ export class Game {
     this.player.root.rotation.y = PLAYER_SPAWN_YAW;
     this.scene.add(this.player.root);
 
+    // One liftable car, parked in the bay World leaves empty by the entry ramp.
+    this.liftableCar = new LiftableCar(this.scene, this.world, LIFTABLE_CAR_SLOT);
+
     this.combat = new CombatSystem();
     this.greenCodeBurst = new GreenCodeBurst(this.scene);
     this.enemyManager = new EnemyManager(ENEMY_COUNT, ENEMY_SPAWN_CENTER);
@@ -61,6 +65,7 @@ export class Game {
     this.playerHealthFill = document.getElementById('player-health-fill');
     this.playerHealthValue = document.getElementById('player-health-value');
     this.objective = document.getElementById('objective');
+    this.liftPrompt = document.getElementById('lift-prompt');
     this.damageFlash = document.getElementById('damage-flash');
     this.gameOverPanel = document.getElementById('game-over');
     this.gameOverScore = document.getElementById('game-over-score');
@@ -80,6 +85,7 @@ export class Game {
       thumb: document.getElementById('move-stick-thumb'),
       jumpButton: document.getElementById('jump-button'),
       punchButton: document.getElementById('punch-button'),
+      liftButton: document.getElementById('lift-button'),
     });
     this.clock = new THREE.Clock();
     this._idleInput = {
@@ -88,7 +94,9 @@ export class Game {
       sprint: false,
       jumpPressed: false,
       punchPressed: false,
+      liftPressed: false,
     };
+    this._liftPromptText = '';
     this._disposed = false;
 
     this._loop = this._loop.bind(this);
@@ -107,12 +115,19 @@ export class Game {
     const canRetry = this.gameOver && !this.gameOverPanel.hidden;
     if (canRetry && (this.input.restartPressed || this.input.punchPressed)) this._restart();
 
+    // Pickup is an intent like any other, but it needs the car, so it is resolved
+    // here rather than inside Player — Player only ever sees "a prop".
+    if (!this.gameOver && this.input.liftPressed && this.liftableCar.canLift(this.player)) {
+      this.player.startLift(this.liftableCar);
+    }
+
     this.player.update(
       dt,
       this.gameOver ? this._idleInput : this.input,
       this.camera,
       this.world
     );
+    this.liftableCar.update(dt, this.world, this.player);
     const respawned = this.enemyManager.update(dt, this.player, this.world);
 
     if (!this.gameOver) {
@@ -132,14 +147,24 @@ export class Game {
       }
       if (result.defeatedEnemy) this.greenCodeBurst.play(result.hitEnemy.root.position);
       if (result.playerHit) this._updatePlayerHud();
+
+      const flattened = this.combat.resolveThrownProp(
+        this.liftableCar, this.enemyManager.enemies
+      );
+      if (flattened.length) {
+        this.greenCodeBurst.play(flattened[flattened.length - 1].root.position);
+        this._updateEnemyHud();
+      }
+
       if (this.player.health === 0) this._endGame();
       this.world.collide(this.player.root.position, this.player.collisionRadius);
     }
     if (respawned) this._updateEnemyHud();
+    this._updateLiftPrompt();
 
     this._updateDeathFade(dt);
     this.greenCodeBurst.update(dt);
-    this.followCam.update(dt);
+    this.followCam.update(dt, this.player.velocity.lengthSq() > 0.01);
     this.renderer.render(this.scene, this.camera);
     this.input.endFrame(); // clear edge-triggered input after everyone has read it
   }
@@ -170,6 +195,21 @@ export class Game {
     this.playerHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
   }
 
+  // One prompt drives both the desktop HUD line and the touch button's label.
+  _updateLiftPrompt() {
+    let text = '';
+    if (this.gameOver || this.player.busyWithProp) text = '';
+    else if (this.player.carrying) text = 'J / LIFT — THROW THE CAR';
+    else if (this.liftableCar.canLift(this.player)) text = 'E / LIFT — PICK UP THE CAR';
+
+    if (text !== this._liftPromptText) {
+      this._liftPromptText = text;
+      this.liftPrompt.textContent = text;
+      this.liftPrompt.hidden = !text;
+      this.mobileControls.setLiftState(!!text, this.player.carrying ? 'THROW' : 'LIFT');
+    }
+  }
+
   _endGame() {
     this.gameOver = true;
     this._downTime = 0;
@@ -187,6 +227,7 @@ export class Game {
     this.player.reset();
     this.player.root.position.copy(PLAYER_SPAWN);
     this.player.root.rotation.y = PLAYER_SPAWN_YAW;
+    this.liftableCar.reset();
     this.enemyManager.reset(ENEMY_SPAWN_CENTER);
     this._focusEnemy = null;
     this._updateEnemyHud();
@@ -228,6 +269,7 @@ export class Game {
       this.input.dispose();
       this.followCam.dispose();
       this.player.dispose();
+      this.liftableCar.dispose();
       this.enemyManager.dispose();
       this.greenCodeBurst.dispose();
       this.world.dispose();

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
 const TOUCH_CAMERA_ZONE_START = 0.45;
+const AUTO_FOLLOW_SPEED = 3.5;
+const MANUAL_ORBIT_DELAY = 1.25;
 
 // Third-person orbit camera. The mouse (pointer-lock) drives yaw/pitch around the
 // player; the rig trails at a fixed distance while the player turns to face its
@@ -29,6 +31,7 @@ export class ThirdPersonCamera {
     this._lastPointerX = 0;
     this._lastPointerY = 0;
     this._lastCanvasPointerType = null;
+    this._manualOrbitTime = 0;
     this._bounds = opts.bounds ?? null;
 
     // Pointer lock: click the canvas to capture the mouse, Esc to release.
@@ -41,6 +44,7 @@ export class ThirdPersonCamera {
     this._onMouseMove = (e) => {
       if (document.pointerLockElement !== domElement) return;
       this.yaw -= e.movementX * this.sensitivity;
+      this._manualOrbitTime = MANUAL_ORBIT_DELAY;
       this.pitch = THREE.MathUtils.clamp(
         this.pitch + e.movementY * this.sensitivity, this.minPitch, this.maxPitch
       );
@@ -66,6 +70,7 @@ export class ThirdPersonCamera {
         this._lastPointerX = event.clientX;
         this._lastPointerY = event.clientY;
         this.yaw -= movementX * this.sensitivity;
+        this._manualOrbitTime = MANUAL_ORBIT_DELAY;
         this.pitch = THREE.MathUtils.clamp(
           this.pitch + movementY * this.sensitivity, this.minPitch, this.maxPitch
         );
@@ -87,7 +92,13 @@ export class ThirdPersonCamera {
     window.addEventListener('blur', this._onBlur);
   }
 
-  update(dt) {
+  update(dt, isTargetMoving = false) {
+    this._manualOrbitTime = Math.max(0, this._manualOrbitTime - dt);
+    if (isTargetMoving && this._manualOrbitTime === 0) {
+      const followYaw = this.target.rotation.y + Math.PI;
+      this.yaw = dampAngle(this.yaw, followYaw, AUTO_FOLLOW_SPEED, dt);
+    }
+
     // Spherical offset from yaw/pitch, scaled by distance.
     const cosP = Math.cos(this.pitch);
     this._offset
@@ -129,4 +140,11 @@ export class ThirdPersonCamera {
     window.removeEventListener('blur', this._onBlur);
     this._cameraPointerId = null;
   }
+}
+
+function dampAngle(current, target, speed, dt) {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return current + diff * (1 - Math.exp(-speed * dt));
 }

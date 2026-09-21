@@ -31,17 +31,31 @@ Both are regenerated from `models-src/agent.glb` + `models-src/UAL2_Standard.glb
 so treat them as build artifacts — re-run after changing the source models or the
 clip list.
 
+## After a bake: hard-reload the browser
+
+The bake rewrites `public/models/agent-dcl.glb` in place and its size changes. A
+browser or dev server holding the old copy can end up unable to read the new one,
+and `Player` then falls back to its primitive placeholder **silently**. That
+placeholder is a dark capsule body with a sphere head and a green tie — nearly the
+same build as `Enemy`'s rig — so the symptom is *"the player suddenly looks like
+one of the agents"*. It is a stale asset, not a changed model. **Ctrl+Shift+R.**
+
 ## Which clips get baked
 
 Edit the `KEEP` set at the top of [`scripts/bake-animations.mjs`](../scripts/bake-animations.mjs)
 (or pass `--all` to embed every clip). Default is a brawler starter set:
 `Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`,
-plus the three `NinjaJump_*` phases. The full shipped set, and what each clip is
-bound to, is catalogued in [animation-catalog.md](./animation-catalog.md).
+`OverhandThrow`, plus the three `NinjaJump_*` phases. Two of those are means, not
+`Walk_Carry_Loop` does double duty — it is the source the authored clips are built
+from *and* a shipped clip, renamed `Carry_Loop` via `RENAME`, as `OverhandThrow` is
+renamed `Throw`. Synthesis is **additive**: a recipe writes new names, it never
+replaces the clip its source ships as.
+The full shipped set, and what each clip is bound to, is catalogued in
+[animation-catalog.md](./animation-catalog.md).
 Keeping fewer clips = smaller file (animation keyframes, not geometry, dominate the
 size — Draco won't shrink them).
 
-## Walk and Run are authored, not copied
+## Walk, Run and the carry pair are authored, not copied
 
 UAL2 has **no neutral walk and no run**. Its only forward locomotion is
 `Walk_Carry_Loop`, and there the legs are a real human walk while the arms are
@@ -60,9 +74,25 @@ which keeps that clip's (correct, floor-locked) lower body and authors the rest:
   spine lean, a wider bent-elbow pump and a faster cadence. Because stretching the
   legs lifts the feet, pelvis height is re-solved per frame so the planted foot
   still meets the floor.
-- **`Carry_Loop`** — the original clip, renamed and kept. It is bound to
-  `STATE.CARRY` in `AnimationController` but nothing selects it yet; it is waiting
-  for carrying an object to become a real game state.
+The same trade buys the carry pose. UAL2 holds things *low* — `Walk_Carry_Loop`
+cradles a crate at the chest, `Idle_Lantern_Loop` dangles a lantern at the hip —
+and nothing in it holds a load **overhead**, which is what lifting a car needs. So
+[`scripts/lib/carry.mjs`](../scripts/lib/carry.mjs) authors that pair too:
+
+- **`Carry_Loop`** — the source's stride again, under arms **raised** rather than
+  dropped (a sign flip on `shoulderDrop`), elbows braced, fingers gripping, and
+  the trunk leaned *back* to counterweight the mass overhead. Retimed to the
+  slower carry walk speed so the feet don't skate.
+- **`Carry_Overhead_Idle`** — the identical hold over `Idle_No_Loop`'s standing legs.
+
+Note the names. The library's own chest-height `Carry_Loop` still ships untouched;
+the authored clips sit beside it rather than replacing it. After any bake that adds
+a clip, diff the result against the previous GLB clip-by-clip and confirm every
+pre-existing clip is identical.
+
+Both recipes sit on [`scripts/lib/pose.mjs`](../scripts/lib/pose.mjs), the shared
+rig-level kit (`authorArms`, `setHipPitch`, `lockFeetToFloor`, `leanBones`, …).
+Add a third recipe there rather than duplicating those operations.
 
 **The hips are the other half of the fix.** The carry stance tips the pelvis ~33°
 *back* and curls the spine forward to compensate, so straightening the spine alone
@@ -94,6 +124,52 @@ node scripts/inspect-locomotion.mjs models-src/agent-animated.glb Walk Run
 It reports swing ranges, foot-contact spread and hand/hip clearance, and the
 arm/leg correlation — which should sit near **−1.00**, meaning each arm swings
 opposite the leg on its own side.
+
+## The car throw is authored too
+
+Same reason, different gap: UAL2's only throw is `OverhandThrow`, a one-armed
+grenade toss. Bound to a car held in both hands it reads as a **punch** — the off
+hand never leaves the hip. [`scripts/lib/throw.mjs`](../scripts/lib/throw.mjs)
+authors `Throw_Overhead` instead.
+
+It differs from the locomotion and carry recipes in two ways:
+
+- **It authors motion, not a pose.** `TRACKS` keys every arm and trunk value at
+  five phases — hold, wind-up, release, follow-through, recover — and splines them
+  with Catmull-Rom (*not* smoothstep per segment: that eases to a dead stop at
+  every key, and a throw whose arms pause at the release has no whip in it).
+  `authorArms` accepts a per-frame config and `setHipPitch` a per-frame target,
+  which is what those tracks feed.
+- **The lower body is one frozen frame**, not a source clip. `Player` roots the
+  character for the whole throw, so the feet do not travel; the weight comes from
+  the pelvis rocking back and then over, with `lockFeetToFloor` re-seating the body
+  on top of it each frame.
+
+Two things must stay in sync with `src/Player.js`, or the animation and the
+gameplay drift apart:
+
+- the clip's `duration` matches `THROW_PROFILE.duration`, so it plays at
+  `clipRate` 1;
+- `RELEASE` in the phase table matches `THROW_PROFILE.release / .duration` — the
+  frame the car actually leaves the hands, which is why the arms are authored to
+  reach full extension exactly there.
+
+**`shoulderBias` inverts for a raised arm.** `authorArms` documents negative as
+forward, which is true of an arm hanging at the side; rotating a *raised* arm about
+the same axis carries it the other way, so the throw's overhead keys use positive
+for forward. Get it backwards and the clip winds up forward and releases backward.
+
+Check a bake with:
+
+```bash
+node scripts/inspect-throw.mjs models-src/agent-animated.glb
+```
+
+With no clip named it reports `Throw_Overhead` and the parked `Throw` side by side.
+Hand **asymmetry** should be near zero — both hands on the car — where the
+one-armed library clip scores **1.19m**; the forward **peak** should land at or
+just after the 0.42s release (a follow-through, not a stop); and **trunk** fold
+should stay under ~55°, past which it reads as a bow rather than a heave.
 
 ## Adding a new animation
 
@@ -142,12 +218,12 @@ feels too high or floaty.
 4. **Rebind** every merged animation channel from the library's duplicate bone to
    the character's same-named bone.
 5. Dispose the library's leftover scene + orphan skeleton nodes.
-6. Synthesize `Walk` and `Run` from `Walk_Carry_Loop` and rename it `Carry_Loop`
-   (see above).
+6. Synthesize `Walk` + `Run` and the `Carry_Overhead_*` pair (see above), then
+   apply `RENAME` so the library clips ship under their stable names.
 7. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
    one buffer, write the GLB.
 
-No Blender required. Validated on the current assets: 10 clips, 65 animated bones,
+No Blender required. Validated on the current assets: 13 clips, 65 animated bones,
 all channel targets resolve, single skin/skeleton.
 
 ## Blender alternative

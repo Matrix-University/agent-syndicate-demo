@@ -2,19 +2,31 @@ import * as THREE from 'three';
 
 // Locomotion states. Player decides which one applies from movement; this
 // controller maps it to a clip and crossfades.
-// CARRY is bound but never selected yet: the carry-walk posture is parked here
-// until carrying an object is an actual game state (Player.update sets IDLE /
-// WALK / RUN only). See scripts/lib/locomotion.mjs.
-export const STATE = { IDLE: 'idle', WALK: 'walk', RUN: 'run', CARRY: 'carry' };
+// CARRY_OVERHEAD / CARRY_OVERHEAD_IDLE are the two halves of hoisting a prop over
+// the head: Player selects them while it is carrying something (see
+// Player.carrying). CARRY is the library's chest-height carry walk — still bound,
+// still selected by nothing, parked for a future carry-object state.
+export const STATE = {
+  IDLE: 'idle', WALK: 'walk', RUN: 'run', CARRY: 'carry',
+  CARRY_OVERHEAD: 'carryOverhead', CARRY_OVERHEAD_IDLE: 'carryOverheadIdle',
+};
+
+// States whose clip is a standing pose, so playback runs at authored speed
+// instead of being scaled by ground speed.
+const STILL_STATES = new Set([STATE.IDLE, STATE.CARRY_OVERHEAD_IDLE]);
 
 // State -> clip name fragments, matched case-insensitively as a substring and
-// tried in order, so a neutral "Idle_No_Loop" wins over "Idle_Lantern_Loop".
-// NOTE: substring matching assumes reasonably curated clip names.
+// tried in order, so a neutral "Idle_No_Loop" wins over "Carry_Overhead_Idle".
+// NOTE: substring matching assumes reasonably curated clip names. The three carry
+// clips are disambiguated by fragment length — "carry_loop" is NOT a substring of
+// "carry_overhead_loop", so the parked clip and the authored one can't cross-bind.
 const CLIP_NAMES = {
   [STATE.IDLE]: ['idle_no', 'idle', 'breath'],
   [STATE.WALK]: ['walk'],
   [STATE.RUN]: ['run', 'jog', 'sprint'],
-  [STATE.CARRY]: ['carry'],
+  [STATE.CARRY]: ['carry_loop'],
+  [STATE.CARRY_OVERHEAD]: ['carry_overhead_loop', 'carry_overhead'],
+  [STATE.CARRY_OVERHEAD_IDLE]: ['carry_overhead_idle'],
 };
 
 // If a state's own clip is missing, borrow one of these — so a model shipping a
@@ -24,11 +36,19 @@ const CLIP_FALLBACK = {
   [STATE.WALK]: [STATE.RUN, STATE.IDLE],
   [STATE.RUN]: [STATE.WALK, STATE.IDLE],
   [STATE.CARRY]: [STATE.WALK, STATE.IDLE],
+  [STATE.CARRY_OVERHEAD]: [STATE.CARRY, STATE.WALK, STATE.IDLE],
+  [STATE.CARRY_OVERHEAD_IDLE]: [STATE.CARRY_OVERHEAD, STATE.IDLE],
 };
 
 // One-shot actions: triggered, played ONCE, then control returns to locomotion.
+// `throw_overhead` is the authored two-handed car heave and must be tried first:
+// the shorter `throw` fragment also matches it, and would otherwise bind the
+// library's one-armed OverhandThrow (shipped as `Throw`) — which reads as a punch
+// thrown while a car floats overhead. Same disambiguation-by-fragment-length as
+// the carry clips.
 const ACTIONS = {
   punch: ['melee_hook', 'punch'],
+  throw: ['throw_overhead', 'throw', 'overhand'],
 };
 
 // Jump is a 3-phase clip sequence layered over the vertical physics in Player.
@@ -102,7 +122,7 @@ export class AnimationController {
       this.current = next;
     }
     if (this.current) {
-      this.current.timeScale = state === STATE.IDLE
+      this.current.timeScale = STILL_STATES.has(state)
         ? 1
         : THREE.MathUtils.clamp(speedFactor, 0.6, 2.2);
     }
@@ -110,14 +130,15 @@ export class AnimationController {
 
   // Play a one-shot action once (e.g. 'punch'). Returns false if it can't (no clip,
   // airborne, or already mid-action). Cancels a landing flourish if one is playing.
-  playAction(name) {
+  // `timeScale` retimes a library clip to the beat Player's action profile expects.
+  playAction(name, timeScale = 1) {
     const action = this.oneShots[name];
     if (!action || this._airborne || this._action) return false;
     if (this._landing) this._endLanding();
     action.reset();
     action.setLoop(THREE.LoopOnce, 1);
     action.clampWhenFinished = true; // hold the final pose while it fades out
-    action.timeScale = 1;
+    action.timeScale = timeScale;
     action.fadeIn(FADE_ACTION).play();
     if (this.current) this.current.fadeOut(FADE_ACTION);
     this.current = null; // setLocomotion re-crossfades once the action ends
