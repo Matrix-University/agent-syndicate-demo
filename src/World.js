@@ -171,20 +171,86 @@ function addStripedBarrier(scene, position, rotationY, materials, length = 9.6) 
   scene.add(group);
 }
 
-function addCheckpoint(scene, concreteMaterial, redMaterial, metalMaterial) {
+function addCheckpoint(scene, concreteMaterial, darkConcreteMaterial, metalMaterial) {
   const checkpoint = new THREE.Group();
-  checkpoint.position.set(0, 0, 45.5);
+  checkpoint.name = 'hell-club-entrance';
+  checkpoint.position.set(0, 0, 54.5);
   checkpoint.rotation.y = Math.PI;
 
-  const arch = new THREE.Mesh(
-    new THREE.TorusGeometry(5.6, 0.48, 8, 28, Math.PI),
-    redMaterial
+  const facadeShape = new THREE.Shape();
+  facadeShape.moveTo(-36, 0);
+  facadeShape.lineTo(-6, 0);
+  facadeShape.lineTo(-6, 1.5);
+  facadeShape.absellipse(0, 1.5, 6, 4.3, Math.PI, 0, true);
+  facadeShape.lineTo(6, 0);
+  facadeShape.lineTo(36, 0);
+  facadeShape.lineTo(36, 7.2);
+  facadeShape.lineTo(-36, 7.2);
+  facadeShape.closePath();
+  const facade = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(facadeShape, { depth: 1.2, bevelEnabled: false, curveSegments: 32 }),
+    darkConcreteMaterial
   );
-  arch.position.set(0, 0.48, 0);
-  checkpoint.add(arch);
+  facade.position.z = -0.6;
+  facade.castShadow = true;
+  facade.receiveShadow = true;
+  checkpoint.add(facade);
+
+  for (let index = 0; index < 18; index += 1) {
+    const startAngle = index * Math.PI / 18 + 0.003;
+    const endAngle = (index + 1) * Math.PI / 18 - 0.003;
+    const stoneShape = new THREE.Shape();
+    stoneShape.absellipse(0, 1.5, 6.55, 4.85, startAngle, endAngle, false);
+    stoneShape.absellipse(0, 1.5, 6, 4.3, endAngle, startAngle, true);
+    stoneShape.closePath();
+    const stone = new THREE.Mesh(
+      new THREE.ExtrudeGeometry(stoneShape, { depth: 0.18, bevelEnabled: false, curveSegments: 32 }),
+      concreteMaterial
+    );
+    stone.position.z = 0.6;
+    stone.castShadow = true;
+    stone.receiveShadow = true;
+    checkpoint.add(stone);
+  }
+
+  const recessShape = new THREE.Shape();
+  recessShape.moveTo(-6.5, 0);
+  recessShape.lineTo(-2.2, 0);
+  recessShape.lineTo(-2.2, 4.8);
+  recessShape.lineTo(2.2, 4.8);
+  recessShape.lineTo(2.2, 0);
+  recessShape.lineTo(6.5, 0);
+  recessShape.lineTo(6.5, 7.2);
+  recessShape.lineTo(-6.5, 7.2);
+  recessShape.closePath();
+  const recess = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(recessShape, { depth: 0.5, bevelEnabled: false }),
+    concreteMaterial
+  );
+  recess.position.z = -3.85;
+  recess.castShadow = true;
+  recess.receiveShadow = true;
+  checkpoint.add(recess);
+
+  const returnGeometry = new THREE.BoxGeometry(0.5, 7.2, 3.75);
+  for (const x of [-6.25, 6.25]) {
+    const returnWall = new THREE.Mesh(returnGeometry, concreteMaterial);
+    returnWall.position.set(x, 3.6, -1.975);
+    returnWall.castShadow = true;
+    returnWall.receiveShadow = true;
+    checkpoint.add(returnWall);
+  }
+
+  const slabGeometry = new THREE.BoxGeometry(13, 0.2, 4.45);
+  for (const height of [-0.1, 7.3]) {
+    const slab = new THREE.Mesh(slabGeometry, darkConcreteMaterial);
+    slab.position.set(0, height, -1.625);
+    slab.receiveShadow = true;
+    checkpoint.add(slab);
+  }
 
   const counterGeometry = new THREE.BoxGeometry(3.5, 1.65, 2.1);
-  for (const x of [-4.5, 4.5]) {
+  for (const x of [-6, 6]) {
     const counter = new THREE.Mesh(counterGeometry, concreteMaterial);
     counter.position.set(x, 0.825, 0);
     counter.castShadow = true;
@@ -193,17 +259,28 @@ function addCheckpoint(scene, concreteMaterial, redMaterial, metalMaterial) {
   }
 
   const gate = new THREE.Mesh(new THREE.BoxGeometry(4.4, 4.8, 0.28), metalMaterial);
-  gate.position.set(0, 2.4, 0.35);
+  gate.name = 'hell-club-level-door';
+  gate.position.set(0, 2.4, -3.1);
+  gate.receiveShadow = true;
   checkpoint.add(gate);
   const barGeometry = new THREE.BoxGeometry(0.16, 4.5, 0.38);
   for (let x = -1.9; x <= 1.9; x += 0.48) {
     const bar = new THREE.Mesh(barGeometry, metalMaterial);
-    bar.position.set(x, 2.4, 0.12);
+    bar.position.set(x, 2.4, -2.8);
+    bar.castShadow = true;
+    bar.receiveShadow = true;
     checkpoint.add(bar);
   }
 
-  const redLight = new THREE.PointLight(0xff2a20, 42, 18, 1.5);
-  redLight.position.set(0, 5.4, -1.8);
+  const railGeometry = new THREE.BoxGeometry(4.5, 0.14, 0.42);
+  for (const height of [0.3, 2.3, 4.65]) {
+    const rail = new THREE.Mesh(railGeometry, metalMaterial);
+    rail.position.set(0, height, -2.75);
+    checkpoint.add(rail);
+  }
+
+  const redLight = new THREE.PointLight(0xd92218, 32, 12, 1.5);
+  redLight.position.set(0, 4.9, -1.7);
   checkpoint.add(redLight);
   scene.add(checkpoint);
 }
@@ -369,13 +446,6 @@ export function buildWorld(scene) {
     scene.add(wall);
   }
 
-  const farEndWall = new THREE.Mesh(
-    new THREE.BoxGeometry(72, 7.2, 1), darkConcreteMaterial
-  );
-  farEndWall.position.set(0, 3.6, 54.5);
-  farEndWall.receiveShadow = true;
-  scene.add(farEndWall);
-
   addWallSegment(
     scene,
     new THREE.Vector3(-35.5, 0, -34.5),
@@ -520,7 +590,7 @@ export function buildWorld(scene) {
   world.cameraBounds = GARAGE_CAMERA_BOUNDS;
   addParkedCars(scene, parkedCars, world);
 
-  addCheckpoint(scene, concreteMaterial, redPaintMaterial, darkMetalMaterial);
+  addCheckpoint(scene, concreteMaterial, darkConcreteMaterial, darkMetalMaterial);
   addQueueRopes(scene, redPaintMaterial, darkMetalMaterial);
   addStripedBarrier(
     scene,
@@ -538,7 +608,7 @@ export function buildWorld(scene) {
   }
 
   const exitSign = makeSign('EXIT  >', 5.5, 1.35, '#174d32', '#f5fff6');
-  exitSign.position.set(0, 5.25, 53.9);
+  exitSign.position.set(-27.5, 5.85, 53.78);
   exitSign.rotation.y = Math.PI;
   scene.add(exitSign);
 
