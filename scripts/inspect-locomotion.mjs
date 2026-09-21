@@ -1,9 +1,10 @@
-// Sanity-check the baked locomotion clips: arm swing, gait phase relationship,
+// Check the baked locomotion clips: arm swing, gait phase relationship,
 // spine lean and per-frame foot contact. Run after a bake to confirm the
-// synthesized Walk/Run are actually moving and still standing on the floor.
+// synthesized Walk/Run retain ground contact and the run has a flight phase.
 //
 //   node scripts/inspect-locomotion.mjs [file.glb] [clip ...]
 
+import assert from 'node:assert/strict';
 import { NodeIO } from '@gltf-transform/core';
 import { buildSkeleton, readPose, fk, getQuat, UP, FORWARD } from './lib/skeleton.mjs';
 import { qMul, qConj, vSub, vNorm, DEG } from './lib/quat.mjs';
@@ -31,7 +32,7 @@ for (const anim of root.listAnimations()) {
   const name = anim.getName();
   if (only.length && !only.includes(name)) continue;
   const pose = readPose(anim, skel);
-  const track = { armL: [], armR: [], legL: [], legR: [], elbowL: [], spine: [], floor: [], hip: [], hand: [] };
+  const track = { armL: [], armR: [], legL: [], legR: [], kneeL: [], kneeR: [], elbowL: [], spine: [], floor: [], hip: [], hand: [] };
 
   for (let f = 0; f < pose.frames; f++) {
     const world = fk(pose, skel, f);
@@ -39,6 +40,8 @@ for (const anim of root.listAnimations()) {
     track.armR.push(sagittal(world, 'upperarm_r', 'lowerarm_r'));
     track.legL.push(sagittal(world, 'thigh_l', 'calf_l'));
     track.legR.push(sagittal(world, 'thigh_r', 'calf_r'));
+    track.kneeL.push(track.legL.at(-1) - sagittal(world, 'calf_l', 'foot_l'));
+    track.kneeR.push(track.legR.at(-1) - sagittal(world, 'calf_r', 'foot_r'));
     track.elbowL.push(offsetDeg(pose, 'lowerarm_l', f));
     track.spine.push(offsetDeg(pose, 'spine_02', f));
     let lowest = Infinity;
@@ -68,6 +71,7 @@ for (const anim of root.listAnimations()) {
 
   console.log(`\n=== ${name}  (${pose.frames} frames, ${pose.times[pose.frames - 1].toFixed(2)}s)`);
   console.log(`  thigh swing L ${range(track.legL)}°   R ${range(track.legR)}°`);
+  console.log(`  knee flexion L ${range(track.kneeL)}°   R ${range(track.kneeR)}°`);
   console.log(`  arm swing   L ${range(track.armL)}°   R ${range(track.armR)}°`);
   console.log(`  elbow bend    ${range(track.elbowL)}°   spine offset ${range(track.spine)}°`);
   console.log(`  arm/leg same-side correlation  L ${corr(track.armL, track.legL).toFixed(2)}  ` +
@@ -77,4 +81,26 @@ for (const anim of root.listAnimations()) {
   console.log(`  pelvis bob    ${((Math.max(...track.hip) - Math.min(...track.hip)) * 100).toFixed(1)}cm ` +
     `(lowest ${Math.min(...track.hip).toFixed(3)})   hand/hip side gap ` +
     `${range(track.hand)} (want > 0: hands clear of the body)`);
+
+  if (name === 'Walk' || name === 'Run') {
+    const floorSpread = Math.max(...track.floor) - Math.min(...track.floor);
+    assert.ok(corr(track.armL, track.legL) < -0.95 && corr(track.armR, track.legR) < -0.95,
+      `${name}: arms must oppose the legs`);
+    if (name === 'Walk') {
+      assert.ok(floorSpread < 0.001, 'Walk must stay floor-locked');
+    } else {
+      assert.ok(floorSpread > 0.04 && floorSpread < 0.12, 'Run needs a short flight phase');
+      for (const knees of [track.kneeL, track.kneeR]) {
+        assert.ok(Math.min(...knees) > 0 && Math.max(...knees) > 95 && Math.max(...knees) < 140,
+          'Run needs bent-knee recovery without hyperextension');
+      }
+      const first = fk(pose, skel, 0);
+      const last = fk(pose, skel, pose.frames - 1);
+      for (const bone of skel.order) {
+        const gap = Math.hypot(...vSub(first.get(bone).pos, last.get(bone).pos));
+        assert.ok(gap < 0.001, `Run loop must close at ${bone}`);
+      }
+    }
+    console.log(`  PASS: ${name} gait checks`);
+  }
 }

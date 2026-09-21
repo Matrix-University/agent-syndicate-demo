@@ -22,10 +22,10 @@ the browser). Only the final `agent-dcl.glb` lands in `public/models/`.
 
 Outputs:
 
-| File | Location | What it is | Use |
-|---|---|---|---|
-| `agent-animated.glb` | `models-src/` | character + embedded clips, **uncompressed** | intermediate; a decoder-free single file if you want it |
-| `agent-dcl.glb` | `public/models/` | same, **Draco** geometry compression | **the shipped asset** — browser (via DRACOLoader) and DCL |
+| File                 | Location         | What it is                                   | Use                                                       |
+| -------------------- | ---------------- | -------------------------------------------- | --------------------------------------------------------- |
+| `agent-animated.glb` | `models-src/`    | character + embedded clips, **uncompressed** | intermediate; a decoder-free single file if you want it   |
+| `agent-dcl.glb`      | `public/models/` | same, **Draco** geometry compression         | **the shipped asset** — browser (via DRACOLoader) and DCL |
 
 Both are regenerated from `models-src/agent.glb` + `models-src/UAL2_Standard.glb`,
 so treat them as build artifacts — re-run after changing the source models or the
@@ -37,8 +37,8 @@ The bake rewrites `public/models/agent-dcl.glb` in place and its size changes. A
 browser or dev server holding the old copy can end up unable to read the new one,
 and `Player` then falls back to its primitive placeholder **silently**. That
 placeholder is a dark capsule body with a sphere head and a green tie — nearly the
-same build as `Enemy`'s rig — so the symptom is *"the player suddenly looks like
-one of the agents"*. It is a stale asset, not a changed model. **Ctrl+Shift+R.**
+same build as `Enemy`'s rig — so the symptom is _"the player suddenly looks like
+one of the agents"_. It is a stale asset, not a changed model. **Ctrl+Shift+R.**
 
 ## Which clips get baked
 
@@ -47,7 +47,7 @@ Edit the `KEEP` set at the top of [`scripts/bake-animations.mjs`](../scripts/bak
 `Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`,
 `OverhandThrow`, plus the three `NinjaJump_*` phases. Two of those are means, not
 `Walk_Carry_Loop` does double duty — it is the source the authored clips are built
-from *and* a shipped clip, renamed `Carry_Loop` via `RENAME`, as `OverhandThrow` is
+from _and_ a shipped clip, renamed `Carry_Loop` via `RENAME`, as `OverhandThrow` is
 renamed `Throw`. Synthesis is **additive**: a recipe writes new names, it never
 replaces the clip its source ships as.
 The full shipped set, and what each clip is bound to, is catalogued in
@@ -64,24 +64,26 @@ pinned in a carry pose — a constant 66.5° off rest on every frame, never swin
 holding a crate, and `RUN` fell back to the same clip.
 
 So the bake calls [`scripts/lib/locomotion.mjs`](../scripts/lib/locomotion.mjs),
-which keeps that clip's (correct, floor-locked) lower body and authors the rest:
+which preserves that clip's lower body for walking and authors a separate run:
 
-- **`Walk`** — carry lean removed from the spine by subtracting its *average*
+- **`Walk`** — carry lean removed from the spine by subtracting its _average_
   offset from rest, so the torso's natural walking sway survives; **hips
   re-pitched forward**; arms, elbows and fingers authored fresh. Arm phase is read
   off the source's own thigh swing, so the arms can't fall out of step with the feet.
-- **`Run`** — that walk with the thigh/calf swing exaggerated 1.35×, a forward
-  spine lean, a wider bent-elbow pump and a faster cadence. Because stretching the
-  legs lifts the feet, pelvis height is re-solved per frame so the planted foot
-  still meets the floor.
-The same trade buys the carry pose. UAL2 holds things *low* — `Walk_Carry_Loop`
-cradles a crate at the chest, `Idle_Lantern_Loop` dangles a lantern at the hip —
-and nothing in it holds a load **overhead**, which is what lifting a car needs. So
-[`scripts/lib/carry.mjs`](../scripts/lib/carry.mjs) authors that pair too:
+- **`Run`** — independent `RUN_STRIDE` keys for stance compression, rearward
+  push-off, folded heel recovery, and forward knee drive. Periodic cubic curves
+  join the keys smoothly; the legs alternate half a cycle apart. Pelvis height is
+  re-solved for floor contact, then two brief flight phases add up to 8 cm of
+  clearance. The forward lean and bent-elbow pump follow the new leg phase, not
+  the walking phase. The walk recipe and movement speeds are unchanged.
+  The same trade buys the carry pose. UAL2 holds things _low_ — `Walk_Carry_Loop`
+  cradles a crate at the chest, `Idle_Lantern_Loop` dangles a lantern at the hip —
+  and nothing in it holds a load **overhead**, which is what lifting a car needs. So
+  [`scripts/lib/carry.mjs`](../scripts/lib/carry.mjs) authors that pair too:
 
 - **`Carry_Loop`** — the source's stride again, under arms **raised** rather than
   dropped (a sign flip on `shoulderDrop`), elbows braced, fingers gripping, and
-  the trunk leaned *back* to counterweight the mass overhead. Retimed to the
+  the trunk leaned _back_ to counterweight the mass overhead. Retimed to the
   slower carry walk speed so the feet don't skate.
 - **`Carry_Overhead_Idle`** — the identical hold over `Idle_No_Loop`'s standing legs.
 
@@ -95,7 +97,7 @@ rig-level kit (`authorArms`, `setHipPitch`, `lockFeetToFloor`, `leanBones`, …)
 Add a third recipe there rather than duplicating those operations.
 
 **The hips are the other half of the fix.** The carry stance tips the pelvis ~33°
-*back* and curls the spine forward to compensate, so straightening the spine alone
+_back_ and curls the spine forward to compensate, so straightening the spine alone
 just exposes the backward hip and leaves the character walking on its heels.
 `setHipPitch` re-pitches the pelvis to a neutral read from the rig's own
 `Idle_No_Loop` (an artist-authored standing posture on this exact skeleton),
@@ -104,11 +106,11 @@ orientation it already had, so the legs and the planted foot don't move and only
 the trunk swings. Measured hip→neck lean: idle **+8.0°**, walk **+5.4°**, run
 **+18.6°** (was −28.7° backwards).
 
-Two ordering rules that bite if you rearrange this: `setHipPitch` must run *before*
-`authorArms` (the shoulders are solved against the actual torso), and the run's leg
-exaggeration must scale each leg's swing about the clip's **own mean pose**, not
-about the bind pose — the hip correction folds a constant offset into those locals,
-and scaling that too drags the whole stride forward instead of widening it.
+Two ordering rules that bite if you rearrange this: `setHipPitch` must run _before_
+`authorArms` (the shoulders are solved against the actual torso), and the run's
+flight clearance must be added _after_ solving ground contact or the floor lock
+will remove it. Run thighs and feet are solved in model space; knees hinge in
+their parent's frame so heel recovery follows the thigh.
 
 Shoulders are solved against the **actual** torso each frame rather than the bind
 pose: this source pitches the pelvis forward for the carry crouch, and anchoring
@@ -121,9 +123,10 @@ Check a bake with:
 node scripts/inspect-locomotion.mjs models-src/agent-animated.glb Walk Run
 ```
 
-It reports swing ranges, foot-contact spread and hand/hip clearance, and the
+It reports swing ranges, knee flexion, foot-contact spread and hand/hip clearance, and the
 arm/leg correlation — which should sit near **−1.00**, meaning each arm swings
-opposite the leg on its own side.
+opposite the leg on its own side. It asserts that walking stays floor-locked and
+running has bent-knee recovery, a brief flight phase, and a continuous loop.
 
 ## The car throw is authored too
 
@@ -136,7 +139,7 @@ It differs from the locomotion and carry recipes in two ways:
 
 - **It authors motion, not a pose.** `TRACKS` keys every arm and trunk value at
   five phases — hold, wind-up, release, follow-through, recover — and splines them
-  with Catmull-Rom (*not* smoothstep per segment: that eases to a dead stop at
+  with Catmull-Rom (_not_ smoothstep per segment: that eases to a dead stop at
   every key, and a throw whose arms pause at the release has no whip in it).
   `authorArms` accepts a per-frame config and `setHipPitch` a per-frame target,
   which is what those tracks feed.
@@ -155,7 +158,7 @@ gameplay drift apart:
   reach full extension exactly there.
 
 **`shoulderBias` inverts for a raised arm.** `authorArms` documents negative as
-forward, which is true of an arm hanging at the side; rotating a *raised* arm about
+forward, which is true of an arm hanging at the side; rotating a _raised_ arm about
 the same axis carries it the other way, so the throw's overhead keys use positive
 for forward. Get it backwards and the clip winds up forward and releases backward.
 
@@ -174,9 +177,10 @@ should stay under ~55°, past which it reads as a bow rather than a heave.
 ## Adding a new animation
 
 Clip/state wiring lives in `src/AnimationController.js`; `src/Player.js` decides
-*intent* and `src/Input.js` maps keys. There are **two kinds** of animation:
+_intent_ and `src/Input.js` maps keys. There are **two kinds** of animation:
 
 **1. Looping states** (idle, walk, run) — driven continuously by movement.
+
 - Add the state to `STATE`, a clip-name fragment to `CLIP_NAMES`, and (optionally)
   a `CLIP_FALLBACK` (all in `AnimationController.js`), then select it in the
   `this.state = …` line of `Player.update()`.
@@ -184,6 +188,7 @@ Clip/state wiring lives in `src/AnimationController.js`; `src/Player.js` decides
 **2. One-shot actions** (punch, kick, throw) — triggered by input, play once, then
 control returns to locomotion. This is the `ACTIONS` map + `playAction()` system in
 `AnimationController.js`.
+
 - Add the clip to `ACTIONS` (e.g. `kick: ['sword_dash', 'kick']`).
 - Add an edge-triggered intent getter in `src/Input.js` (e.g.
   `get kickPressed() { return this.wasPressed('KeyK'); }`) and call it in
@@ -197,7 +202,7 @@ listed in [animation-catalog.md](./animation-catalog.md) — check there for one
 already does what you need before authoring a move. Regenerate its tables with
 `npm run clips`.
 
-**Jump** (implemented) is a *clip sequence plus vertical movement*: `Player.update()`
+**Jump** (implemented) is a _clip sequence plus vertical movement_: `Player.update()`
 runs a small physics block (jump velocity + gravity + ground check on
 `root.position.y`, constants `gravity`/`jumpSpeed`) and calls
 `anim.jumpTakeoff()`/`anim.jumpLand()`; `AnimationController` runs a 3-phase

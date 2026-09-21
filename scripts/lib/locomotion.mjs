@@ -12,18 +12,12 @@
 // own thigh swing rather than assumed, so the arms cannot fall out of step with
 // the feet however the source clip is timed.
 //
-// Run is that walk with the leg swing exaggerated, a forward lean, a wider
-// bent-elbow swing and a quicker cadence — with pelvis height re-solved per
-// frame so the planted foot still meets the floor after the legs are stretched.
-
-import { qMul, qConj, qScaleAngle, qMean, DEG } from './quat.mjs';
-import { readPose, clonePose, fk, getQuat, setQuat, writeClip } from './skeleton.mjs';
+import { qConj, qFromAxisAngle, qRotV, DEG } from './quat.mjs';
+import { readPose, clonePose, fk, setQuat, getVec3, setVec3, writeClip, LEFT, UP } from './skeleton.mjs';
 import {
   SIDES, SPINE, NECK, authorArms, limbAngle, removeMeanOffset, setHipPitch,
-  meanPitch, groundContact, lockFeetToFloor, leanBones,
+  meanPitch, groundContact, lockFeetToFloor, leanBones, setInWorld, setFromRest,
 } from './pose.mjs';
-
-const LEG_SEGMENTS = ['thigh', 'calf'];
 
 const WALK = {
   shoulderDrop: 82 * DEG,  // under 90 so the arms clear the ribs
@@ -43,10 +37,38 @@ const RUN = {
   elbowSwing: 18 * DEG,
   fingerCurl: 34 * DEG,
   hipLean: 14 * DEG,       // a run drives from the hips, well ahead of the walk
-  legGain: 1.35,           // exaggerate the walk's thigh/calf swing
+  flightHeight: 0.08,
+  stanceEnd: 0.76,
   lean: [4 * DEG, 3 * DEG, 2 * DEG], // spine_01..03, compounding up the torso
   headCounter: -5.5 * DEG, // per neck bone, to hold the eyeline up
 };
+
+const RUN_STRIDE = [
+  { time: 0, thigh: 32, knee: 20, foot: -6 },
+  { time: 0.18, thigh: 0, knee: 35, foot: 0 },
+  { time: 0.38, thigh: -30, knee: 18, foot: 28 },
+  { time: 0.52, thigh: -18, knee: 105, foot: 18 },
+  { time: 0.70, thigh: 35, knee: 110, foot: 0 },
+  { time: 0.86, thigh: 48, knee: 55, foot: -10 },
+  { time: 1, thigh: 32, knee: 20, foot: -6 },
+];
+
+function runStrideAngle(time, joint) {
+  const last = RUN_STRIDE.length - 1;
+  const index = RUN_STRIDE.findIndex((key, keyIndex) => keyIndex < last && time < RUN_STRIDE[keyIndex + 1].time);
+  const start = RUN_STRIDE[index];
+  const end = RUN_STRIDE[index + 1];
+  const before = RUN_STRIDE[index === 0 ? last - 1 : index - 1];
+  const after = RUN_STRIDE[index + 1 === last ? 1 : index + 2];
+  const span = end.time - start.time;
+  const amount = (time - start.time) / span;
+  const startSlope = (end[joint] - before[joint]) / (end.time - before.time + (index === 0 ? 1 : 0));
+  const endSlope = (after[joint] - start[joint]) / (after.time - start.time + (index + 1 === last ? 1 : 0));
+  return ((2 * amount ** 3 - 3 * amount ** 2 + 1) * start[joint]
+    + (amount ** 3 - 2 * amount ** 2 + amount) * span * startSlope
+    + (-2 * amount ** 3 + 3 * amount ** 2) * end[joint]
+    + (amount ** 3 - amount ** 2) * span * endSlope) * DEG;
+}
 
 // Per-side gait phase in [-1, 1], taken from the thighs of the source clip.
 //
@@ -106,32 +128,37 @@ export function synthesizeLocomotion(doc, skel, sourceName, opts = {}) {
   const walkLift = lockFeetToFloor(walk, skel, floor);
   writeClip(doc, 'Walk', walk, skel, walkDuration / sourceDuration);
 
-  // --- Run: that walk, exaggerated and leaned into ----------------------------
   const run = clonePose(walk);
-  // Exaggerate each leg's swing about the clip's OWN mean pose, not about the
-  // bind pose. setHipPitch folds a constant counter-rotation into these locals to
-  // keep the feet planted, and scaling that too would amplify the hip correction
-  // and drag the whole stride forward instead of just widening it.
-  for (const s of SIDES) {
-    for (const segment of LEG_SEGMENTS) {
-      const bone = `${segment}_${s}`;
-      const rest = skel.rest(bone).r;
-      const restInv = qConj(rest);
-      const deltas = [];
-      for (let f = 0; f < run.frames; f++) deltas.push(qMul(restInv, getQuat(run, bone, f)));
-      const mean = qMean(deltas);
-      const meanInv = qConj(mean);
-      for (let f = 0; f < run.frames; f++) {
-        const swing = qScaleAngle(qMul(meanInv, deltas[f]), RUN.legGain);
-        setQuat(run, bone, f, qMul(rest, qMul(mean, swing)));
+  for (let frame = 0; frame < run.frames; frame++) {
+    const cycle = run.times[frame] / sourceDuration;
+    for (const side of SIDES) {
+      const time = (cycle + (side === 'r' ? 0.5 : 0)) % 1;
+      const pelvis = fk(run, skel, frame).get('pelvis');
+      setQuat(run, `thigh_${side}`, frame, setInWorld(skel, `thigh_${side}`,
+        qFromAxisAngle(LEFT, -runStrideAngle(time, 'thigh')), pelvis.rot));
+      setQuat(run, `calf_${side}`, frame, setFromRest(skel, `calf_${side}`,
+        qFromAxisAngle(LEFT, runStrideAngle(time, 'knee'))));
+      const calf = fk(run, skel, frame).get(`calf_${side}`);
+      setQuat(run, `foot_${side}`, frame, setInWorld(skel, `foot_${side}`,
+        qFromAxisAngle(LEFT, runStrideAngle(time, 'foot')), calf.rot));
+      for (const bone of [`ball_${side}`, `ball_leaf_${side}`]) {
+        if (skel.has(bone)) setQuat(run, bone, frame, skel.rest(bone).r);
       }
     }
   }
   leanBones(run, skel, SPINE, RUN.lean);
   leanBones(run, skel, NECK, RUN.headCounter);
   setHipPitch(run, skel, neutralPitch + RUN.hipLean);
-  authorArms(run, skel, RUN, phase);
+  authorArms(run, skel, RUN, gaitPhase(run, skel).phase);
   const footLockMaxLift = lockFeetToFloor(run, skel, floor);
+  for (let frame = 0; frame < run.frames; frame++) {
+    const step = (run.times[frame] / sourceDuration * 2) % 1;
+    const flight = Math.max(0, (step - RUN.stanceEnd) / (1 - RUN.stanceEnd));
+    const lift = RUN.flightHeight * Math.sin(Math.PI * flight) ** 2;
+    const upInRoot = qRotV(qConj(fk(run, skel, frame).get('root').rot), UP);
+    const pelvis = getVec3(run, 'pelvis', frame);
+    setVec3(run, 'pelvis', frame, pelvis.map((value, axis) => value + upInRoot[axis] * lift));
+  }
   writeClip(doc, 'Run', run, skel, runDuration / sourceDuration);
 
   return {
