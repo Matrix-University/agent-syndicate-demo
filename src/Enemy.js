@@ -7,24 +7,11 @@ const WINDUP_DURATION = 0.4;
 const STRIKE_DURATION = 0.16;
 const RECOVER_DURATION = 0.9;
 const APPROACH_TIMEOUT = 4;
-const HEAD_VARIANTS = ['black', 'blond', 'brown'];
-
-const HEAD_MATERIALS = {
-  black: {
-    color: 0x1b1a19,
-    roughness: 0.62,
-    metalness: 0.05,
-  },
-  blond: {
-    color: 0xd3c08d,
-    roughness: 0.68,
-    metalness: 0,
-  },
-  brown: {
-    color: 0x8b6748,
-    roughness: 0.66,
-    metalness: 0,
-  },
+const HAIR_VARIANTS = ['black', 'brown', 'blonde'];
+const HAIR_COLORS = {
+  black: 0x050706,
+  brown: 0x3a2014,
+  blonde: 0xc9ad68,
 };
 
 export class Enemy {
@@ -34,7 +21,7 @@ export class Enemy {
     this.root.add(this.rig);
 
     this.id = opts.id ?? 0;
-    this.headVariant = opts.headVariant ?? HEAD_VARIANTS[(Math.random() * HEAD_VARIANTS.length) | 0];
+    this.hairVariant = opts.hairVariant ?? HAIR_VARIANTS[(this.id - 1) % HAIR_VARIANTS.length];
     this.maxHealth = 3;
     this.health = this.maxHealth;
     this.collisionRadius = 0.7;
@@ -73,15 +60,30 @@ export class Enemy {
       roughness: 0.62,
       metalness: 0.16,
     });
-    const shirtMaterial = new THREE.MeshStandardMaterial({
-      ...HEAD_MATERIALS[this.headVariant],
+    const skinMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8f5436,
+      roughness: 0.72,
+      metalness: 0,
     });
     const accentMaterial = new THREE.MeshStandardMaterial({
-      color: 0x39ff14,
-      emissive: 0x0c3a06,
-      emissiveIntensity: 1.2,
-      roughness: 0.4,
-      metalness: 0.1,
+      color: 0x050706,
+      roughness: 0.58,
+      metalness: 0.12,
+    });
+    const hairMaterial = new THREE.MeshStandardMaterial({
+      color: HAIR_COLORS[this.hairVariant] ?? HAIR_COLORS.black,
+      roughness: 0.72,
+      metalness: 0.04,
+    });
+    const shirtMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe8ebe7,
+      roughness: 0.82,
+      metalness: 0,
+    });
+    const glassesMaterial = new THREE.MeshStandardMaterial({
+      color: 0x020303,
+      roughness: 0.2,
+      metalness: 0.55,
     });
 
     const torso = new THREE.Mesh(
@@ -94,17 +96,50 @@ export class Enemy {
 
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.4, 16, 16),
-      shirtMaterial
+      skinMaterial
     );
     head.position.y = 2.92;
     head.castShadow = true;
     this.rig.add(head);
 
+    const hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.52),
+      hairMaterial
+    );
+    hair.position.set(0, 2.98, -0.015);
+    hair.scale.z = 0.92;
+    hair.rotation.x = -0.12;
+    hair.castShadow = true;
+    this.rig.add(hair);
+
+    const sideHairGeometry = new THREE.BoxGeometry(0.08, 0.24, 0.22);
+    for (const x of [-0.35, 0.35]) {
+      const sideHair = new THREE.Mesh(sideHairGeometry, hairMaterial);
+      sideHair.position.set(x, 3.01, -0.02);
+      sideHair.castShadow = true;
+      this.rig.add(sideHair);
+    }
+
+    const glasses = new THREE.Mesh(
+      new THREE.BoxGeometry(0.72, 0.15, 0.08),
+      glassesMaterial
+    );
+    glasses.position.set(0, 2.99, 0.35);
+    glasses.castShadow = true;
+    this.rig.add(glasses);
+
+    const shirt = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.5, 0.07),
+      shirtMaterial
+    );
+    shirt.position.set(0, 2.08, 0.48);
+    this.rig.add(shirt);
+
     const tie = new THREE.Mesh(
-      new THREE.BoxGeometry(0.13, 0.72, 0.06),
+      new THREE.BoxGeometry(0.11, 0.46, 0.06),
       accentMaterial
     );
-    tie.position.set(0, 1.95, 0.47);
+    tie.position.set(0, 2.03, 0.53);
     this.rig.add(tie);
 
     const limbGeometry = new THREE.CapsuleGeometry(0.16, 0.78, 4, 8);
