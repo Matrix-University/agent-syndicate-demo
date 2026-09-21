@@ -20,7 +20,7 @@ const CAR_MODELS = [
 // The one parking bay left empty for the liftable car (LiftableCar owns the mesh
 // and the collider there). It is the bay nearest the entry ramp, so the pickup is
 // a landmark you run *to* rather than something underfoot at spawn.
-export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -20.15, z: -44, yaw: Math.PI / 2 });
+export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -29, z: -44, yaw: Math.PI / 2 });
 
 // Resolves the player against static garage geometry as a circle on the ground.
 export class World {
@@ -112,26 +112,99 @@ export class World {
 function addParkingLines(scene, material) {
   const stripeGeometry = new THREE.BoxGeometry(5.8, 0.025, 0.12);
   const stopGeometry = new THREE.BoxGeometry(0.12, 0.025, 6.3);
-  const centerGeometry = new THREE.BoxGeometry(0.16, 0.025, 3.4);
 
   for (const side of [-1, 1]) {
     for (let z = -44; z <= 44; z += 8) {
       for (const offset of [-3.15, 3.15]) {
         const stripe = new THREE.Mesh(stripeGeometry, material);
-        stripe.position.set(side * 20.15, 0.025, z + offset);
+        stripe.position.set(side * 29, 0.025, z + offset);
         scene.add(stripe);
       }
 
       const stop = new THREE.Mesh(stopGeometry, material);
-      stop.position.set(side * 23.05, 0.025, z);
+      stop.position.set(side * 31.9, 0.025, z);
       scene.add(stop);
     }
   }
+}
 
-  for (let z = -47; z <= 47; z += 7) {
-    const dash = new THREE.Mesh(centerGeometry, material);
-    dash.position.set(0, 0.026, z);
-    scene.add(dash);
+function addStripedBarrier(scene, position, rotationY, materials, length = 9.6) {
+  const group = new THREE.Group();
+  const segmentCount = 12;
+  const segmentLength = length / segmentCount;
+  const segmentGeometry = new THREE.BoxGeometry(segmentLength + 0.025, 0.18, 0.2);
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const segment = new THREE.Mesh(segmentGeometry, materials[index % 2]);
+    segment.position.x = -length / 2 + segmentLength * (index + 0.5);
+    group.add(segment);
+  }
+
+  group.position.copy(position);
+  group.rotation.set(0, rotationY, -0.08);
+  scene.add(group);
+}
+
+function addCheckpoint(scene, concreteMaterial, redMaterial, metalMaterial) {
+  const checkpoint = new THREE.Group();
+  checkpoint.position.set(0, 0, 45.5);
+  checkpoint.rotation.y = Math.PI;
+
+  const arch = new THREE.Mesh(
+    new THREE.TorusGeometry(5.6, 0.48, 8, 28, Math.PI),
+    redMaterial
+  );
+  arch.position.set(0, 0.48, 0);
+  checkpoint.add(arch);
+
+  const counterGeometry = new THREE.BoxGeometry(3.5, 1.65, 2.1);
+  for (const x of [-4.5, 4.5]) {
+    const counter = new THREE.Mesh(counterGeometry, concreteMaterial);
+    counter.position.set(x, 0.825, 0);
+    counter.castShadow = true;
+    counter.receiveShadow = true;
+    checkpoint.add(counter);
+  }
+
+  const gate = new THREE.Mesh(new THREE.BoxGeometry(4.4, 4.8, 0.28), metalMaterial);
+  gate.position.set(0, 2.4, 0.35);
+  checkpoint.add(gate);
+  const barGeometry = new THREE.BoxGeometry(0.16, 4.5, 0.38);
+  for (let x = -1.9; x <= 1.9; x += 0.48) {
+    const bar = new THREE.Mesh(barGeometry, metalMaterial);
+    bar.position.set(x, 2.4, 0.12);
+    checkpoint.add(bar);
+  }
+
+  const redLight = new THREE.PointLight(0xff2a20, 42, 18, 1.5);
+  redLight.position.set(0, 5.4, -1.8);
+  checkpoint.add(redLight);
+  scene.add(checkpoint);
+}
+
+function addQueueRopes(scene, redMaterial, metalMaterial) {
+  const postGeometry = new THREE.CylinderGeometry(0.09, 0.13, 1.25, 10);
+  const baseGeometry = new THREE.CylinderGeometry(0.3, 0.42, 0.12, 12);
+  const ropeGeometry = new THREE.CylinderGeometry(0.055, 0.055, 3.8, 8);
+
+  for (const side of [-1, 1]) {
+    for (const z of [40, 44, 48]) {
+      const x = side * 4.3;
+      const post = new THREE.Mesh(postGeometry, metalMaterial);
+      post.position.set(x, 0.68, z);
+      scene.add(post);
+
+      const base = new THREE.Mesh(baseGeometry, metalMaterial);
+      base.position.set(x, 0.06, z);
+      scene.add(base);
+
+      if (z < 48) {
+        const rope = new THREE.Mesh(ropeGeometry, redMaterial);
+        rope.rotation.x = Math.PI / 2;
+        rope.position.set(x, 1.2, z + 2);
+        scene.add(rope);
+      }
+    }
   }
 }
 
@@ -143,7 +216,7 @@ async function addParkedCars(scene, slots, world) {
     if (world.disposed) {
       models.forEach((model) => disposeObject(model.scene));
     } else {
-      slots.forEach(([x, z], index) => {
+      slots.forEach(([x, z, yaw], index) => {
         const car = models[(index * 2 + 1) % models.length].scene.clone(true);
         car.scale.setScalar(1.65);
         car.traverse((object) => {
@@ -159,7 +232,7 @@ async function addParkedCars(scene, slots, world) {
 
         const parkingSpot = new THREE.Group();
         parkingSpot.position.set(x, 0, z);
-        parkingSpot.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+        parkingSpot.rotation.y = yaw ?? (x < 0 ? Math.PI / 2 : -Math.PI / 2);
         parkingSpot.add(car);
         scene.add(parkingSpot);
       });
@@ -203,38 +276,44 @@ function makeSign(text, width, height, background, foreground) {
 
 // Builds a low-ceiling B2 parking deck around a clear central drive aisle.
 export function buildWorld(scene) {
-  scene.background = new THREE.Color(0x090b0a);
-  scene.fog = new THREE.Fog(0x111713, 30, 92);
+  scene.background = new THREE.Color(0x070b09);
+  scene.fog = new THREE.Fog(0x13201a, 24, 86);
   const root = new THREE.Group();
   root.name = 'world';
   scene.add(root);
   scene = root;
 
   const concreteMaterial = new THREE.MeshStandardMaterial({
-    color: 0x777b75, roughness: 0.94, metalness: 0.02,
+    color: 0x696e69, roughness: 0.97, metalness: 0.01,
   });
   const darkConcreteMaterial = new THREE.MeshStandardMaterial({
-    color: 0x373d39, roughness: 0.96, metalness: 0.02,
+    color: 0x303733, roughness: 0.98, metalness: 0.01,
   });
   const ceilingMaterial = new THREE.MeshStandardMaterial({
-    color: 0x6b706c, roughness: 1, metalness: 0,
+    color: 0x414a45, roughness: 1, metalness: 0,
   });
   const whitePaintMaterial = new THREE.MeshStandardMaterial({
-    color: 0xd9ddd4, roughness: 0.8, emissive: 0x252721,
+    color: 0x8f9790, roughness: 0.9, emissive: 0x111512,
   });
-  const yellowPaintMaterial = new THREE.MeshStandardMaterial({
-    color: 0xe2b72f, roughness: 0.78, emissive: 0x302305,
+  const redPaintMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8f1717, roughness: 0.72, emissive: 0x260303,
+  });
+  const barrierWhiteMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd8d8ce, roughness: 0.75, emissive: 0x20221f,
+  });
+  const darkMetalMaterial = new THREE.MeshStandardMaterial({
+    color: 0x262b29, roughness: 0.52, metalness: 0.58,
   });
   const fixtureMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff, emissive: 0xe9fff2, emissiveIntensity: 3.8, roughness: 0.3,
   });
   const colliders = [];
 
-  scene.add(new THREE.HemisphereLight(0xd8f5df, 0x20241f, 1.35));
+  scene.add(new THREE.HemisphereLight(0xc9e2d2, 0x182019, 1.8));
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(72, 110),
-    new THREE.MeshStandardMaterial({ color: 0x3f4541, roughness: 0.86, metalness: 0.08 })
+    new THREE.MeshStandardMaterial({ color: 0x29332e, roughness: 0.92, metalness: 0.04 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -290,35 +369,29 @@ export function buildWorld(scene) {
   entryApron.receiveShadow = true;
   scene.add(entryApron);
 
-  const entryGuideGeometry = new THREE.BoxGeometry(0.14, 0.03, 9.5);
-  for (const x of [-4.65, 4.65]) {
-    const guide = new THREE.Mesh(entryGuideGeometry, yellowPaintMaterial);
-    guide.position.set(x, 0.04, -49);
-    scene.add(guide);
-  }
-
-  const clearanceBar = new THREE.Mesh(
-    new THREE.BoxGeometry(10.5, 0.22, 0.22), yellowPaintMaterial
+  addStripedBarrier(
+    scene,
+    new THREE.Vector3(0, 4.55, -53.25),
+    0,
+    [redPaintMaterial, barrierWhiteMaterial],
+    10.5
   );
-  clearanceBar.position.set(0, 5.35, -53.35);
-  scene.add(clearanceBar);
 
   const bollardGeometry = new THREE.BoxGeometry(0.42, 1.25, 0.42);
   for (const x of [-5.35, 5.35]) {
-    const bollard = new THREE.Mesh(bollardGeometry, yellowPaintMaterial);
+    const bollard = new THREE.Mesh(bollardGeometry, redPaintMaterial);
     bollard.position.set(x, 0.625, -52.9);
     bollard.castShadow = true;
     scene.add(bollard);
   }
 
-  const entrySign = makeSign('ENTRY', 5.8, 1.05, '#174d32', '#f5fff6');
+  const entrySign = makeSign('PARKING', 5.8, 1.05, '#c8ccc5', '#26302c');
   entrySign.position.set(0, 4.62, -53.92);
   scene.add(entrySign);
 
-  const pillarGeometry = new THREE.BoxGeometry(2.25, 7.2, 2.25);
-  const safetyBandGeometry = new THREE.BoxGeometry(2.32, 1.1, 2.32);
+  const pillarGeometry = new THREE.BoxGeometry(2.35, 7.2, 2.35);
   const beamGeometry = new THREE.BoxGeometry(56, 0.75, 0.9);
-  for (let z = -48; z <= 48; z += 16) {
+  for (let z = -46; z <= 38; z += 12) {
     const beam = new THREE.Mesh(beamGeometry, darkConcreteMaterial);
     beam.position.set(0, 6.6, z);
     beam.castShadow = true;
@@ -330,12 +403,7 @@ export function buildWorld(scene) {
       pillar.castShadow = true;
       pillar.receiveShadow = true;
       scene.add(pillar);
-      colliders.push({ x, z, hx: 1.125, hz: 1.125 });
-
-      const safetyBand = new THREE.Mesh(safetyBandGeometry, yellowPaintMaterial);
-      safetyBand.position.set(x, 0.72, z);
-      safetyBand.castShadow = true;
-      scene.add(safetyBand);
+      colliders.push({ x, z, hx: 1.175, hz: 1.175 });
     }
   }
 
@@ -344,23 +412,24 @@ export function buildWorld(scene) {
   const curbGeometry = new THREE.BoxGeometry(0.45, 0.28, 2.7);
   for (const side of [-1, 1]) {
     for (let z = -44; z <= 44; z += 8) {
-      const curb = new THREE.Mesh(curbGeometry, yellowPaintMaterial);
-      curb.position.set(side * 23.4, 0.15, z);
+      const curb = new THREE.Mesh(curbGeometry, concreteMaterial);
+      curb.position.set(side * 32.25, 0.15, z);
       scene.add(curb);
     }
   }
 
   const lightGeometry = new THREE.BoxGeometry(0.32, 0.12, 6.4);
-  for (let z = -45; z <= 45; z += 10) {
-    for (const x of [-7, 7]) {
+  for (let z = -46; z <= 46; z += 8) {
+    for (const x of [-23, -7, 7, 23]) {
       const fixture = new THREE.Mesh(lightGeometry, fixtureMaterial);
       fixture.position.set(x, 6.78, z);
       scene.add(fixture);
     }
 
-    if (z % 20 === -5) {
-      const light = new THREE.PointLight(0xd5ffe2, 18, 24, 1.8);
-      light.position.set(0, 6.25, z);
+    if ((z + 46) % 16 === 0) {
+      const light = new THREE.PointLight(0xd7ffe4, 28, 28, 1.55);
+      const rowIndex = (z + 46) / 16;
+      light.position.set(rowIndex % 2 === 0 ? -16 : 16, 6.15, z);
       scene.add(light);
     }
   }
@@ -378,15 +447,35 @@ export function buildWorld(scene) {
   }
 
   const parkedCars = [
-    [20.15, -36], [-20.15, -28], [20.15, -20],
-    [-20.15, 4], [20.15, 12], [-20.15, 20], [20.15, 36], [-20.15, 44],
+    [-29, -36], [-29, -28], [-29, -20], [-29, -12], [-29, -4], [-29, 4],
+    [-29, 12], [-29, 20], [-29, 28], [-29, 36],
+    [29, -44], [29, -36], [29, -28], [29, -20], [29, -12], [29, -4],
+    [29, 4], [29, 12], [29, 20], [29, 28], [29, 36], [29, 44],
+    [-6.5, -28, 0], [6.5, 0, 0], [-6.5, 28, 0],
   ];
-  parkedCars.forEach(([x, z]) => {
-    colliders.push({ x, z, hx: 2.3, hz: 1.45, height: 1.65 });
+  parkedCars.forEach(([x, z, yaw]) => {
+    const isLongitudinal = yaw === 0;
+    colliders.push({
+      x,
+      z,
+      hx: isLongitudinal ? 1.45 : 2.3,
+      hz: isLongitudinal ? 2.3 : 1.45,
+      height: 1.65,
+    });
   });
   const world = new World(root, colliders);
   world.cameraBounds = GARAGE_CAMERA_BOUNDS;
   addParkedCars(scene, parkedCars, world);
+
+  addCheckpoint(scene, concreteMaterial, redPaintMaterial, darkMetalMaterial);
+  addQueueRopes(scene, redPaintMaterial, darkMetalMaterial);
+  addStripedBarrier(
+    scene,
+    new THREE.Vector3(29.2, 0.28, -48),
+    Math.PI / 2,
+    [redPaintMaterial, barrierWhiteMaterial],
+    8.5
+  );
 
   for (const x of [-14, 14]) {
     const sign = makeSign('B2', 3.6, 1.7, '#173e31', '#f2f5ed');
