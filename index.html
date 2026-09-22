@@ -318,6 +318,28 @@
         color: #ff6b6b;
         font-size: 11.5px;
       }
+      #email-gate-step-code[hidden] { display: none; }
+      #email-gate-code-input {
+        letter-spacing: 6px;
+        text-align: center;
+        font-size: 18px;
+      }
+      #email-gate-resend {
+        align-self: flex-start;
+        padding: 0;
+        border: none;
+        background: none;
+        color: #9fe6a0;
+        font: inherit;
+        font-size: 11.5px;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      #email-gate-resend:disabled {
+        color: #6f8a70;
+        cursor: not-allowed;
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
@@ -326,10 +348,11 @@
       <div id="email-gate-panel">
         <h1 id="email-gate-title">JOIN THE SYNDICATE</h1>
         <p id="email-gate-copy">
-          Enter your email to play the demo. We'll only use it to send occasional
-          updates about Agent Syndicate — no spam, unsubscribe anytime.
+          Enter your email to play the demo. We'll send a 6-digit code to confirm
+          it's yours, then use it only for occasional updates about Agent
+          Syndicate — no spam, unsubscribe anytime.
         </p>
-        <form id="email-gate-form" novalidate>
+        <form id="email-gate-step-email" novalidate>
           <label id="email-gate-label" for="email-gate-input">Email address</label>
           <input
             id="email-gate-input"
@@ -339,8 +362,24 @@
             placeholder="you@example.com"
             required
           />
-          <div id="email-gate-error" role="alert" aria-live="assertive"></div>
-          <button id="email-gate-submit" type="submit">ENTER</button>
+          <div id="email-gate-email-error" role="alert" aria-live="assertive"></div>
+          <button id="email-gate-email-submit" type="submit">SEND CODE</button>
+        </form>
+        <form id="email-gate-step-code" novalidate hidden>
+          <label id="email-gate-code-label" for="email-gate-code-input">6-digit code</label>
+          <input
+            id="email-gate-code-input"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            autocomplete="one-time-code"
+            maxlength="6"
+            placeholder="000000"
+            required
+          />
+          <div id="email-gate-code-error" role="alert" aria-live="assertive"></div>
+          <button id="email-gate-code-submit" type="submit">ENTER</button>
+          <button id="email-gate-resend" type="button">Resend code</button>
         </form>
       </div>
     </div>

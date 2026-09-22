@@ -4,7 +4,7 @@ A third-person seed for the brawler demo: a movable character with an animation 
 
 ## Run it
 
-Requires [Node.js](https://nodejs.org) (18+).
+Requires [Node.js](https://nodejs.org) (20.6+, for `process.loadEnvFile`).
 
 ```bash
 npm install
@@ -38,30 +38,184 @@ npm run dev -- --host
 
 ## Email gate
 
-Before playing, visitors must submit an email address (kept locally in
-`data/emails.jsonl`, gitignored, for the site owner to use as a marketing list —
-see [data/README.md](data/README.md)). Once submitted, the browser remembers it
-(`localStorage`) so returning players aren't asked again.
+The email gate is **disabled by default** so the game remains playable before
+an SMTP relay is configured. Once the relay is ready, an admin can enable it
+from `/admin.html`. When enabled, visitors must verify an email address with a
+6-digit code sent to it. Verified addresses are appended to
+`data/emails.jsonl` (gitignored) for the site owner to use as a marketing list
+— see [data/README.md](data/README.md).
+Returning players aren't asked again: the browser remembers verified addresses
+in `localStorage`, backed by a signed, httpOnly session cookie (~180 days) set
+by the server, so they're still recognized even if `localStorage` is cleared.
 
-This requires a small Node server, so **`npm run build` alone is not enough to
-deploy** — the built app needs `/api/subscribe` behind it:
+### No email feature yet
+
+You do **not** need to add SMTP environment variables while the email gate is
+disabled. For the game to run without email collection, leave these unset:
+
+```text
+SMTP_HOST
+SMTP_PORT
+SMTP_SECURE
+SMTP_USER
+SMTP_PASS
+SMTP_FROM
+SMTP_TLS_REJECT_UNAUTHORIZED
+SMTP_CONSOLE_FALLBACK
+```
+
+The server will use the default `emailGateEnabled: false`. You only need these
+variables for the admin dashboard itself:
+
+```env
+SESSION_SECRET=replace-with-a-long-random-value
+ADMIN_PASSWORD=replace-with-a-strong-unique-admin-password
+```
+
+If you do not need the dashboard yet, you can omit those too. The game will
+still run with the gate disabled.
+
+### Enabling email later
+
+When your SMTP relay is ready, add the SMTP values to the server's `.env`, set
+`SMTP_CONSOLE_FALLBACK=false`, restart the server, and enable the gate from
+`/admin.html`. If you're running your own Postfix relay, see
+[docs/postfix-security.md](docs/postfix-security.md) for hardening it (open
+relay, TLS, rate limiting, SPF/DKIM/DMARC):
+
+```bash
+cp .env.example .env
+```
+
+### Development without an SMTP server
+
+For local UI testing, the verification code can be printed in the terminal
+instead of sent by email. Keep `SMTP_HOST` empty and add these values to your
+local `.env`:
+
+```env
+SESSION_SECRET=replace-with-a-long-random-development-value
+ADMIN_PASSWORD=replace-with-a-local-admin-password
+SMTP_CONSOLE_FALLBACK=true
+```
+
+Run `npm run dev`, submit an email in the game, and copy the six-digit code
+from the terminal running Vite. `SMTP_CONSOLE_FALLBACK=true` is for local
+testing only and must not be enabled in production.
+
+### Production environment
+
+For real verification emails, point the app at an SMTP submission service or
+your own Postfix relay. Use placeholders in documentation and real values only
+in the untracked `.env` file:
+
+```env
+SMTP_HOST=mail.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=replace-with-smtp-username
+SMTP_PASS=replace-with-smtp-password
+SMTP_FROM="Agent Syndicate <no-reply@example.com>"
+SMTP_TLS_REJECT_UNAUTHORIZED=true
+
+SESSION_SECRET=replace-with-a-long-random-production-value
+ADMIN_PASSWORD=replace-with-a-strong-unique-admin-password
+SMTP_CONSOLE_FALLBACK=false
+```
+
+Generate a session secret locally with:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+For a self-hosted Postfix relay, use `SMTP_HOST=127.0.0.1` only when Postfix
+runs on the same server as this Node process. Configure SPF, DKIM, DMARC,
+reverse DNS, firewall rules, TLS, and open-relay protection before accepting
+real signups. See [docs/postfix-security.md](docs/postfix-security.md).
+
+Never commit `.env`, SMTP credentials, admin passwords, session secrets, or
+`data/emails.jsonl`. `.env.example` contains names and safe placeholders only.
+
+### Vercel deployment note
+
+Adding variables in the Vercel dashboard does not run this project's Node
+server. The current production setup requires `server/index.mjs` to run as a
+long-lived Node process because it serves the API, writes the email data file,
+stores pending verification codes, and serves the admin dashboard API.
+
+If Vercel only serves the static `dist/` files, the current game and
+`/admin.html` dashboard will not work correctly because the client still needs
+the API endpoints. Use a separate VPS for the Node API and persistent data,
+with Postfix added later, or plan a separate serverless rewrite with persistent
+storage before deploying this feature on Vercel. Vercel environment variables
+are only useful once that API deployment architecture exists:
+
+- Gate disabled, static game only: no SMTP variables; no admin variables unless
+  a separate API handles the dashboard.
+- Dashboard/API hosted on your own Node server: set `SESSION_SECRET` and
+  `ADMIN_PASSWORD` there; keep SMTP variables unset until email is ready.
+- Email gate enabled: add the production `SMTP_*` variables to the server that
+  runs the API, not merely to a static Vercel project.
+
+This also means **`npm run build` alone is not enough to deploy** — the built
+app needs the verification endpoints behind it:
 
 ```bash
 npm run build
-npm start          # serves dist/ + /api/subscribe on http://localhost:4173
+npm start          # serves dist/ + the email endpoints on http://localhost:4173
 ```
 
-`npm run dev` and `npm start` both handle `/api/subscribe` (via a shared handler
-in `server/`), so the gate works locally without any extra setup.
+`npm run dev` and `npm start` both handle `/api/subscribe/start`,
+`/api/subscribe/verify`, and `/api/session` (via shared handlers in `server/`),
+so the gate works locally as soon as `.env` is set up. Without SMTP, leave the
+gate disabled or use the documented `SMTP_CONSOLE_FALLBACK=true` development
+option; do not enable the gate in production until real delivery is working.
+
+## Admin dashboard
+
+For local development:
+
+[http://localhost:5173/admin.html](http://localhost:5173/admin.html)
+
+For production, use:
+
+[https://your-domain.com/admin.html](https://your-domain.com/admin.html)
+
+The production server must be running with `npm start`, and `ADMIN_PASSWORD` must be set in .env.
+
+Visit `/admin.html` to log in (set `ADMIN_PASSWORD` and `SESSION_SECRET` in
+`.env`) and:
+
+- Toggle the email gate on/off. Off, players skip straight to the game; the
+  setting is persisted in `data/settings.json` (gitignored) and survives a
+  restart.
+- Download everyone who's verified so far as a CSV, for an email marketing
+  tool — `/api/admin/emails.csv`, converted from `data/emails.jsonl`.
+
+Login uses a signed, httpOnly session cookie (12 hours) with a 15-minute
+lockout after 5 failed password attempts. `ADMIN_PASSWORD` is a single shared
+secret compared with a timing-safe check, not hashed — keep it strong and out
+of version control (it only ever lives in `.env`).
 
 ## Project structure
 
 ```
 index.html              canvas + HUD + email gate markup, loads src/main.js
+admin.html              admin dashboard: login, gate toggle, CSV download
 src/main.js             boots the Game after the email gate resolves
-src/EmailGate.js         email gate UI logic, calls /api/subscribe
+src/EmailGate.js         email gate UI logic: email step, code step, resend
+src/admin.js            admin dashboard UI logic
 server/index.mjs         standalone production server (serves dist/ + the API)
-server/subscribeHandler.mjs email validation + append to data/emails.jsonl
+server/subscribeHandler.mjs start/complete verification, appends data/emails.jsonl
+server/verificationStore.mjs pending codes: expiry, attempt limit, resend cooldown
+server/session.mjs          signed session cookie so returning players skip the gate
+server/signedCookie.mjs     generic HMAC-signed cookie helpers (session.mjs + adminAuth.mjs)
+server/adminAuth.mjs        admin password check + lockout, admin session cookie
+server/adminHandlers.mjs    admin login/logout/me, gate toggle, CSV export endpoints
+server/settings.mjs         persisted settings (email gate on/off)
+server/emailsExport.mjs     data/emails.jsonl -> CSV
+server/mailer.mjs           nodemailer SMTP transport, configured via .env
 server/requestHandler.mjs   shared HTTP request/response glue
 src/Game.js             renderer, scene, camera, the update loop
 src/World.js            lights, floor, grid, blockout pillars

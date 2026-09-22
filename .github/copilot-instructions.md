@@ -130,6 +130,15 @@ generating/optimizing 3D assets, follow these so one file works in both engines:
   (`moveX`, `moveZ`, `sprint`). Add new actions as getters there; read them in
   `update`. Keys are cleared on `blur` to avoid stuck movement — keep that.
 
+## Email gate & mail server
+
+Playing requires verifying an email via a 6-digit code (`src/EmailGate.js` +
+`server/`), sent over a self-hosted SMTP relay (`server/mailer.mjs`, via
+`nodemailer`) — no 3rd-party email API. Before touching `server/mailer.mjs`,
+`.env.example`'s `SMTP_*` vars, or Postfix config, read and follow
+[docs/postfix-security.md](../docs/postfix-security.md): it covers header
+injection, open-relay, TLS, and rate-limiting requirements for that relay.
+
 ## Conventions & gotchas
 
 - ES modules only (`"type": "module"`); use `import`, not `require`.

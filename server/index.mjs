@@ -1,11 +1,25 @@
-// Production server: serves the built dist/ (npm run build) and the /api/subscribe
-// endpoint that powers the email gate. Run with `npm start` after building.
+// Production server: serves the built dist/ (npm run build) and the email
+// verification endpoints that power the email gate. Run with `npm start` after building.
 import http from 'node:http';
 import { createReadStream, existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { handleSubscribeRequest } from './requestHandler.mjs';
+import { handleStartVerificationRequest, handleCompleteVerificationRequest, handleSessionCheckRequest } from './requestHandler.mjs';
+import {
+  handleAdminLoginRequest,
+  handleAdminLogoutRequest,
+  handleAdminMeRequest,
+  handleAdminGateRequest,
+  handleAdminEmailsCsvRequest,
+  handleGateStatusRequest,
+} from './adminHandlers.mjs';
+
+try {
+  process.loadEnvFile(); // SMTP_*/SESSION_SECRET/ADMIN_PASSWORD vars — see .env.example
+} catch {
+  console.warn('No .env file found — verification emails will fail to send until SMTP_* vars are set.');
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '..', 'dist');
@@ -58,10 +72,16 @@ if (!existsSync(DIST_DIR)) {
 }
 
 const server = http.createServer((req, res) => {
-  if (req.url === '/api/subscribe') {
-    handleSubscribeRequest(req, res);
-    return;
-  }
+  const url = req.url.split('?')[0];
+  if (url === '/api/subscribe/start') return handleStartVerificationRequest(req, res);
+  if (url === '/api/subscribe/verify') return handleCompleteVerificationRequest(req, res);
+  if (url === '/api/session') return handleSessionCheckRequest(req, res);
+  if (url === '/api/gate-status') return handleGateStatusRequest(req, res);
+  if (url === '/api/admin/login') return handleAdminLoginRequest(req, res);
+  if (url === '/api/admin/logout') return handleAdminLogoutRequest(req, res);
+  if (url === '/api/admin/me') return handleAdminMeRequest(req, res);
+  if (url === '/api/admin/gate') return handleAdminGateRequest(req, res);
+  if (url === '/api/admin/emails.csv') return handleAdminEmailsCsvRequest(req, res);
   serveStatic(req, res);
 });
 

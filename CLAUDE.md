@@ -5,11 +5,11 @@ Guidance for Claude Code working in this repo. A third-person brawler prototype 
 no test runner. Keep changes in that idiom.
 
 **Project goal — dual target:** a good **browser** game whose **3D assets are the
-same files a Decentraland (SDK7) scene would load**. The Three.js *engine code* will
+same files a Decentraland (SDK7) scene would load**. The Three.js _engine code_ will
 not run in Decentraland (DCL scenes are SDK7 TypeScript), so the portable layer is
 the **GLB assets**, not the runtime.
 
-**Invariant — one asset, both targets:** the browser and DCL load the *same* baked
+**Invariant — one asset, both targets:** the browser and DCL load the _same_ baked
 character file, `public/models/agent-dcl.glb` (single GLB, embedded clips, Draco).
 Preserve this — don't introduce a browser-only character asset or a separate
 runtime animation file as the shipped path, and don't apply browser-only
@@ -61,10 +61,11 @@ movement code.
 **Frame-rate independence.** All time-based motion takes `dt`. Never `x += speed`;
 always `x += speed * dt`. For smoothing, use the exponential, frame-rate-independent
 forms already in the code — not a fixed-alpha `lerp`:
+
 - `current + diff * (1 - Math.exp(-k * dt))` — see `dampAngle` in `Player.js`.
 - `a.lerp(b, 1 - Math.pow(base, dt))` — see `ThirdPersonCamera.update` and the
   limb ease-out in `_animate`.
-Wrap yaw differences into `[-π, π]` before damping (see `dampAngle`).
+  Wrap yaw differences into `[-π, π]` before damping (see `dampAngle`).
 
 **No per-frame allocation.** Hot paths (`update`, `_animate`, camera `update`)
 must not `new` anything. Reuse the preallocated scratch vectors
@@ -97,7 +98,7 @@ cool rim light, fog. Match it when adding world or character elements.
 ## Animation & gameplay states
 
 **Separation of concerns:** `Player` (`src/Player.js`) owns movement, vertical
-physics, and *intent* (locomotion state, punch, jump, carry/throw);
+physics, and _intent_ (locomotion state, punch, jump, carry/throw);
 `AnimationController` (`src/AnimationController.js`) owns all clip/mixer work.
 Player calls `anim.setLocomotion(state, speedFactor)`, `anim.playAction('punch')`,
 `anim.jumpTakeoff()` / `anim.jumpLand()`, `anim.update(dt)` — keep that boundary
@@ -129,7 +130,7 @@ existing clip before authoring a new move, and record any clip you add there.
 
 **`Walk`, `Run`, the carry pair and the throw are authored by the bake, not shipped
 by the library** — UAL2 has no neutral walk, no run, nothing that holds a load
-*overhead*, and no two-handed throw; its only forward locomotion is
+_overhead_, and no two-handed throw; its only forward locomotion is
 `Walk_Carry_Loop` (real legs, arms locked in a chest-height carry pose) and its only
 throw is a one-armed grenade toss. Three recipe modules sit on the shared pose kit
 `scripts/lib/pose.mjs`:
@@ -141,22 +142,22 @@ throw is a one-armed grenade toss. Three recipe modules sit on the shared pose k
   sign flip on `shoulderDrop` in `authorArms` — and the trunk leaned back under the load.
 - `scripts/lib/throw.mjs` authors `Throw_Overhead`, the car heave, over one frozen
   frame of `Idle_No_Loop` (Player roots the character for the throw, so the feet
-  don't travel). Unlike the other two it authors *motion*: `TRACKS` keys every arm
+  don't travel). Unlike the other two it authors _motion_: `TRACKS` keys every arm
   and trunk value at five phases and splines them, and `authorArms`/`setHipPitch`
   take the per-frame result. `RELEASE` in that table **must** stay at
   `THROW_PROFILE.release / .duration` — it is the frame the car leaves the hands,
   and the arms are authored to reach full extension exactly there.
 
 **The authored clips are additive — never overwrite a shipped clip to make room.**
-`Walk_Carry_Loop` is both an authoring source *and* a shipped clip (renamed
+`Walk_Carry_Loop` is both an authoring source _and_ a shipped clip (renamed
 `Carry_Loop` via `RENAME`); it stays bound to `STATE.CARRY`, selected by nothing,
 parked for a future carry-object state. That is why the overhead pair has its own
-names. The carry stance also tips the pelvis ~33° *back*,
+names. The carry stance also tips the pelvis ~33° _back_,
 so the bake re-pitches the hips to a neutral read from `Idle_No_Loop` —
 straightening the spine alone leaves the character walking on its heels. Tune via
 the `WALK`/`RUN`/`CARRY` constants in those modules, re-bake, and check with
 `node scripts/inspect-locomotion.mjs` (arm/leg correlation should be near −1.00).
-`Throw_Overhead` is authored *to* `THROW_PROFILE`, so it plays at `clipRate` 1;
+`Throw_Overhead` is authored _to_ `THROW_PROFILE`, so it plays at `clipRate` 1;
 check it with `node scripts/inspect-throw.mjs`, which reports it beside the parked
 library `Throw` (hand asymmetry near 0 = two hands on the car; the old one-armed
 clip scores 1.19m and reads as a punch). Beware `shoulderBias`: `authorArms`
@@ -234,10 +235,19 @@ Keyboard state is a `Set` of `e.code` in `Input`, surfaced as axis getters
 Touch action buttons are a data list in `MobileControls` (`this._actions`) — add a
 button there, not another branch.
 
+## Email gate & mail server
+
+Playing requires verifying an email via a 6-digit code (`src/EmailGate.js` +
+`server/`), sent over a self-hosted SMTP relay (`server/mailer.mjs`, via
+`nodemailer`) — no 3rd-party email API. Before touching `server/mailer.mjs`,
+`.env.example`'s `SMTP_*` vars, or Postfix config, read and follow
+[docs/postfix-security.md](docs/postfix-security.md): it covers header
+injection, open-relay, TLS, and rate-limiting requirements for that relay.
+
 ## Code style
 
 - ES modules only (`"type": "module"`) — `import`, never `require`.
 - PascalCase classes, filename matches class; `_`-prefixed private methods/fields.
-- Comments explain *why* (the dt clamp, the root/rig split), not *what*. Keep them
+- Comments explain _why_ (the dt clamp, the root/rig split), not _what_. Keep them
   terse and purposeful — match the existing density.
 - Only commit/push when asked. No CI or hooks to satisfy.

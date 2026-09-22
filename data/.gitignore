@@ -1,2 +1,5 @@
 # Collected email addresses (PII) — never commit real signups.
-data/emails.jsonl
+emails.jsonl
+
+# Runtime admin settings (e.g. email gate on/off) — regenerated with defaults if missing.
+settings.json
