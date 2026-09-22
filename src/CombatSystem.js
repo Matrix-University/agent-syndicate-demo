@@ -26,11 +26,12 @@ export class CombatSystem {
     }
 
     const radiusSq = prop.impactRadius * prop.impactRadius;
+    const start = prop.previousPosition ?? prop.root.position;
+    const end = prop.root.position;
     for (const enemy of enemies) {
       if (!enemy.alive || prop.hasStruck(enemy)) continue;
-      this._toEnemy.subVectors(enemy.root.position, prop.root.position);
-      this._toEnemy.y = 0;
-      if (this._toEnemy.lengthSq() > radiusSq) continue;
+      if (Math.min(start.y, end.y) > PROP_STRIKE_HEIGHT) continue;
+      if (distanceToSegmentSqXZ(enemy.root.position, start, end) > radiusSq) continue;
 
       prop.markStruck(enemy);
       enemy.takeDamage(prop.impactDamage);
@@ -133,4 +134,22 @@ export class CombatSystem {
       player.root.position.z -= minimumDistance;
     }
   }
+}
+
+function distanceToSegmentSqXZ(point, start, end) {
+  const segmentX = end.x - start.x;
+  const segmentZ = end.z - start.z;
+  const lengthSq = segmentX * segmentX + segmentZ * segmentZ;
+  const t = lengthSq > 1e-8
+    ? THREE.MathUtils.clamp(
+      ((point.x - start.x) * segmentX + (point.z - start.z) * segmentZ) / lengthSq,
+      0,
+      1
+    )
+    : 0;
+  const closestX = start.x + segmentX * t;
+  const closestZ = start.z + segmentZ * t;
+  const offsetX = point.x - closestX;
+  const offsetZ = point.z - closestZ;
+  return offsetX * offsetX + offsetZ * offsetZ;
 }

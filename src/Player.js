@@ -250,9 +250,10 @@ export class Player {
     // plays. Carrying doesn't root, it just slows you down.
     const punching = this._punchTime < profile.duration;
     const rooted = punching || lifting || throwing || !!this.anim?.acting;
+    const sprintingForward = input.sprint && input.moveZ > 0;
     const speed = carrying
-      ? (input.sprint ? CARRY_SPEED_SPRINT : CARRY_SPEED_WALK)
-      : (input.sprint ? this.speedSprint : this.speedWalk);
+      ? (sprintingForward ? CARRY_SPEED_SPRINT : CARRY_SPEED_WALK)
+      : (sprintingForward ? this.speedSprint : this.speedWalk);
 
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
     const active = moving && !rooted;

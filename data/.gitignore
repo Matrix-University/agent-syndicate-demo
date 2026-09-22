@@ -1,0 +1,2 @@
+# Collected email addresses (PII) — never commit real signups.
+data/emails.jsonl

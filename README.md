@@ -36,14 +36,33 @@ open the printed network URL on the device:
 npm run dev -- --host
 ```
 
-`npm run build` produces a static `dist/` you can host anywhere — that's how
-you'll share the playable demo as a link later.
+## Email gate
+
+Before playing, visitors must submit an email address (kept locally in
+`data/emails.jsonl`, gitignored, for the site owner to use as a marketing list —
+see [data/README.md](data/README.md)). Once submitted, the browser remembers it
+(`localStorage`) so returning players aren't asked again.
+
+This requires a small Node server, so **`npm run build` alone is not enough to
+deploy** — the built app needs `/api/subscribe` behind it:
+
+```bash
+npm run build
+npm start          # serves dist/ + /api/subscribe on http://localhost:4173
+```
+
+`npm run dev` and `npm start` both handle `/api/subscribe` (via a shared handler
+in `server/`), so the gate works locally without any extra setup.
 
 ## Project structure
 
 ```
-index.html              canvas + HUD, loads src/main.js
-src/main.js             boots the Game
+index.html              canvas + HUD + email gate markup, loads src/main.js
+src/main.js             boots the Game after the email gate resolves
+src/EmailGate.js         email gate UI logic, calls /api/subscribe
+server/index.mjs         standalone production server (serves dist/ + the API)
+server/subscribeHandler.mjs email validation + append to data/emails.jsonl
+server/requestHandler.mjs   shared HTTP request/response glue
 src/Game.js             renderer, scene, camera, the update loop
 src/World.js            lights, floor, grid, blockout pillars
 src/Player.js           the character: rig, movement, animation state machine

@@ -245,10 +245,105 @@
       @media (prefers-reduced-motion: reduce) {
         .hud-meter-fill { transition: none; }
       }
+      #email-gate {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: rgba(4, 8, 6, 0.94);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #email-gate[hidden] { display: none; }
+      #email-gate-panel {
+        width: min(380px, 100%);
+        padding: 24px;
+        box-sizing: border-box;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        border-radius: 6px;
+        background: rgba(8, 16, 12, 0.92);
+        color: #d7ffd0;
+        box-shadow: 0 0 24px rgba(57, 255, 20, 0.18);
+      }
+      #email-gate-title {
+        margin: 0 0 8px;
+        color: var(--matrix-green);
+        font-size: 1.1rem;
+        letter-spacing: 2px;
+        text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+      }
+      #email-gate-copy {
+        margin: 0 0 18px;
+        font-size: 12.5px;
+        line-height: 1.5;
+        opacity: 0.9;
+      }
+      #email-gate-form { display: flex; flex-direction: column; gap: 10px; }
+      #email-gate-label { font-size: 11px; letter-spacing: 1px; }
+      #email-gate-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        border-radius: 4px;
+        background: rgba(4, 8, 6, 0.85);
+        color: #efffec;
+        font: inherit;
+        font-size: 13px;
+      }
+      #email-gate-input:focus-visible {
+        outline: 2px solid var(--matrix-green);
+        outline-offset: 1px;
+      }
+      #email-gate-submit {
+        padding: 10px 12px;
+        border: 1px solid var(--matrix-green);
+        border-radius: 4px;
+        background: rgba(35, 103, 43, 0.9);
+        color: #efffec;
+        font: 700 12px/1 inherit;
+        letter-spacing: 1px;
+        cursor: pointer;
+      }
+      #email-gate-submit:hover,
+      #email-gate-submit:focus-visible {
+        box-shadow: 0 0 14px rgba(57, 255, 20, 0.5);
+      }
+      #email-gate-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+      #email-gate-error {
+        min-height: 1.2em;
+        color: #ff6b6b;
+        font-size: 11.5px;
+      }
     </style>
   </head>
   <body>
     <canvas id="app"></canvas>
+    <div id="email-gate" role="dialog" aria-modal="true" aria-labelledby="email-gate-title" hidden>
+      <div id="email-gate-panel">
+        <h1 id="email-gate-title">JOIN THE SYNDICATE</h1>
+        <p id="email-gate-copy">
+          Enter your email to play the demo. We'll only use it to send occasional
+          updates about Agent Syndicate — no spam, unsubscribe anytime.
+        </p>
+        <form id="email-gate-form" novalidate>
+          <label id="email-gate-label" for="email-gate-input">Email address</label>
+          <input
+            id="email-gate-input"
+            type="email"
+            name="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          />
+          <div id="email-gate-error" role="alert" aria-live="assertive"></div>
+          <button id="email-gate-submit" type="submit">ENTER</button>
+        </form>
+      </div>
+    </div>
     <div id="damage-flash" aria-hidden="true"></div>
     <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
       <h1 id="game-over-title">AGENT DOWN</h1>

@@ -1,4 +1,5 @@
 import { Game } from './Game.js';
+import { requestEmailAccess } from './EmailGate.js';
 
 const canvas = document.getElementById('app');
 const instructionsToggle = document.getElementById('instructions-toggle');
@@ -39,7 +40,8 @@ syncAutomaticInstructions();
 instructionsToggle.addEventListener('click', toggleInstructions);
 window.addEventListener('pointerdown', syncAutomaticInstructions);
 coarsePointer.addEventListener('change', syncAutomaticInstructions);
-game.start();
+
+requestEmailAccess().then(() => game.start());
 
 if (import.meta.hot) {
 	import.meta.hot.dispose(() => {

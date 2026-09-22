@@ -70,6 +70,7 @@ export class LiftableCar {
     this._syncCollider();
 
     this.velocity = new THREE.Vector3();
+    this.previousPosition = new THREE.Vector3();
     this._struck = new Set(); // enemies already hit by the current throw
     this._liftTime = 0;
     this._settleTime = 0;
@@ -136,6 +137,7 @@ export class LiftableCar {
     this._scene.attach(this.root);
     this.state = 'flying';
     this._struck.clear();
+    this.previousPosition.copy(this.root.position);
     this.velocity.copy(direction).multiplyScalar(THROW_SPEED);
     this.velocity.y += THROW_LIFT;
   }
@@ -224,6 +226,7 @@ export class LiftableCar {
   }
 
   _updateFlight(dt, world) {
+    this.previousPosition.copy(this.root.position);
     const previousY = this.root.position.y;
 
     this.velocity.y -= GRAVITY * dt;
