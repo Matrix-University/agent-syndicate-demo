@@ -7,7 +7,7 @@ import * as THREE from 'three';
 // Player.carrying). CARRY is the library's chest-height carry walk — still bound,
 // still selected by nothing, parked for a future carry-object state.
 export const STATE = {
-  IDLE: 'idle', WALK: 'walk', RUN: 'run', CARRY: 'carry',
+  IDLE: 'idle', WALK: 'walk', WALK_BACK: 'walkBack', RUN: 'run', CARRY: 'carry',
   CARRY_OVERHEAD: 'carryOverhead', CARRY_OVERHEAD_IDLE: 'carryOverheadIdle',
 };
 
@@ -23,6 +23,10 @@ const STILL_STATES = new Set([STATE.IDLE, STATE.CARRY_OVERHEAD_IDLE]);
 const CLIP_NAMES = {
   [STATE.IDLE]: ['idle_no', 'idle', 'breath'],
   [STATE.WALK]: ['walk'],
+  // Longer fragment, so plain 'walk' can't shadow it and it can't steal 'walk'.
+  // No such clip ships today — WALK_BACK falls back to the forward walk played
+  // in reverse (see setLocomotion); bake a `Walk_Back` and it binds here instead.
+  [STATE.WALK_BACK]: ['walk_back', 'walk_bwd'],
   [STATE.RUN]: ['run', 'jog', 'sprint'],
   [STATE.CARRY]: ['carry_loop'],
   [STATE.CARRY_OVERHEAD]: ['carry_overhead_loop', 'carry_overhead'],
@@ -34,6 +38,7 @@ const CLIP_NAMES = {
 const CLIP_FALLBACK = {
   [STATE.IDLE]: [],
   [STATE.WALK]: [STATE.RUN, STATE.IDLE],
+  [STATE.WALK_BACK]: [STATE.WALK, STATE.RUN, STATE.IDLE],
   [STATE.RUN]: [STATE.WALK, STATE.IDLE],
   [STATE.CARRY]: [STATE.WALK, STATE.IDLE],
   [STATE.CARRY_OVERHEAD]: [STATE.CARRY, STATE.WALK, STATE.IDLE],
@@ -122,9 +127,13 @@ export class AnimationController {
       this.current = next;
     }
     if (this.current) {
+      // Backpedalling with no backward clip: we borrowed the forward walk, so run
+      // it in reverse. A baked `Walk_Back` binds directly and plays forward — and
+      // DCL's Animator has no reverse, so a DCL port needs that baked clip.
+      const dir = state === STATE.WALK_BACK && !this.actions[state] ? -1 : 1;
       this.current.timeScale = STILL_STATES.has(state)
         ? 1
-        : THREE.MathUtils.clamp(speedFactor, 0.6, 2.2);
+        : dir * THREE.MathUtils.clamp(speedFactor, 0.6, 2.2);
     }
   }
 

@@ -26,6 +26,14 @@ const THROW_PROFILE = { duration: 0.95, release: 0.42, clipRate: 1 };
 const CARRY_SPEED_WALK = 4;
 const CARRY_SPEED_SPRINT = 7.5;
 
+// Backing up: the character holds its facing and walks in reverse, which is
+// slower than striding forward (and can't sprint — see `sprintingForward`).
+const BACK_SPEED_FACTOR = 0.6;
+// How far behind the camera the move has to point before it reads as backing up
+// rather than turning around: the move's dot with camera-forward, -0.35 ~ 110
+// degrees. Anything shallower (a strafe) still turns into the movement.
+const BACK_DOT = -0.35;
+
 // The playable character.
 //   root  -> moves through the world (this is what the camera follows)
 //   rig   -> the visible body; a Quaternius CC0 GLB when present, else primitives
@@ -223,6 +231,9 @@ export class Player {
     const moving = movementMagnitude > MOVEMENT_EPSILON;
     if (moving) this._move.normalize();
 
+    // Backpedal instead of turning when the move points behind the camera.
+    const backing = moving && this._move.dot(this._forward) < BACK_DOT;
+
     // With both hands full the attack input becomes the throw, so touch controls
     // need no extra button and the fists are unavailable until the car is gone.
     // The lift intent throws too: the HUD prompt and the relabelled touch button
@@ -251,9 +262,10 @@ export class Player {
     const punching = this._punchTime < profile.duration;
     const rooted = punching || lifting || throwing || !!this.anim?.acting;
     const sprintingForward = input.sprint && input.moveZ > 0;
-    const speed = carrying
+    const baseSpeed = carrying
       ? (sprintingForward ? CARRY_SPEED_SPRINT : CARRY_SPEED_WALK)
       : (sprintingForward ? this.speedSprint : this.speedWalk);
+    const speed = backing ? baseSpeed * BACK_SPEED_FACTOR : baseSpeed;
 
     // Ease velocity toward the target instead of snapping, for accel/decel weight.
     const active = moving && !rooted;
@@ -303,18 +315,24 @@ export class Player {
       if (this.root.position.z !== pz) this.velocity.z = 0;
     }
 
-    // Face the direction of travel.
+    // Face the direction of travel — except when backing up, where the facing
+    // stays with the camera so the character walks in reverse.
     if (moving && !rooted) {
-      const targetYaw = Math.atan2(this._move.x, this._move.z);
+      const facing = backing ? this._forward : this._move;
+      const targetYaw = Math.atan2(facing.x, facing.z);
       this.root.rotation.y = dampAngle(this.root.rotation.y, targetYaw, this.turnSpeed, dt);
     }
 
     const horizontalSpeed = Math.hypot(this.velocity.x, this.velocity.z);
     const locomoting = horizontalSpeed > 0.1;
     const running = horizontalSpeed > this.speedWalk * 1.35;
+    // Carrying has no backward clip, so a loaded-up backpedal keeps the carry
+    // walk — it just moves at the backing speed.
     this.state = this.carrying
       ? (locomoting ? STATE.CARRY_OVERHEAD : STATE.CARRY_OVERHEAD_IDLE)
-      : (locomoting ? (running ? STATE.RUN : STATE.WALK) : STATE.IDLE);
+      : locomoting
+        ? (backing ? STATE.WALK_BACK : running ? STATE.RUN : STATE.WALK)
+        : STATE.IDLE;
 
     if (this.anim) {
       if (justTookOff) this.anim.jumpTakeoff();
@@ -326,6 +344,7 @@ export class Player {
       // against that speed, not the empty-handed one (speedFactor is per-state).
       const reference = this.state === STATE.RUN ? this.speedSprint
         : this.state === STATE.CARRY_OVERHEAD ? CARRY_SPEED_WALK
+        : this.state === STATE.WALK_BACK ? this.speedWalk * BACK_SPEED_FACTOR
         : this.speedWalk;
       // setLocomotion is a no-op while the controller is airborne/acting.
       this.anim.setLocomotion(this.state, horizontalSpeed / reference);
@@ -473,8 +492,11 @@ export class Player {
       this.armL.rotation.x = extension * 0.28;
       this.torso.rotation.y = extension * 0.32 + recoil;
       this.torso.position.y = 2.0;
-    } else if (this.state === STATE.RUN || this.state === STATE.WALK) {
-      this._t += dt * (6 + intensity * 6);
+    } else if (this.state === STATE.RUN || this.state === STATE.WALK ||
+      this.state === STATE.WALK_BACK) {
+      // Placeholder backpedal: the same cycle, stepped backwards.
+      const dir = this.state === STATE.WALK_BACK ? -1 : 1;
+      this._t += dt * (6 + intensity * 6) * dir;
       const swing = Math.sin(this._t) * 0.8 * intensity;
       this.legL.rotation.x = swing;
       this.legR.rotation.x = -swing;
