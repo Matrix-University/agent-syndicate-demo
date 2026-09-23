@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { sendVerificationEmail } from './mailer.mjs';
 import { generateCode, recordSend, checkCode } from './verificationStore.mjs';
+import { readGateLevel, GATE_OFF, GATE_COLLECT, GATE_VERIFY } from './gateLevel.mjs';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'emails.jsonl');
@@ -47,13 +48,33 @@ async function alreadySubscribed(email) {
     });
 }
 
+/** Appends the address unless it is already on the list. Idempotent by email. */
+async function saveSubscriber(email) {
+  await ensureDataFile();
+  if (await alreadySubscribed(email)) return;
+  const entry = { email, subscribedAt: new Date().toISOString() };
+  await fs.appendFile(DATA_FILE, `${JSON.stringify(entry)}\n`);
+}
+
 /**
- * Emails a 6-digit verification code to the address, unless already subscribed.
- * Returns { status, body } — never throws, so callers can respond directly.
+ * Level 1 stores the address outright; level 2 emails a 6-digit code and stores
+ * nothing yet. Returns { status, body } — never throws, so callers can respond
+ * directly. A 201 means the caller should issue a session cookie.
  */
 export async function startVerification(rawEmail) {
+  const level = readGateLevel();
+  if (level === GATE_OFF) {
+    return { status: 404, body: { error: 'The email gate is disabled.' } };
+  }
+
   const email = normalizeEmail(rawEmail);
   if (!email) return { status: 400, body: { error: 'Enter a valid email address.' } };
+
+  // Level 1 has no second step, so the submit itself is the subscription.
+  if (level === GATE_COLLECT) {
+    await saveSubscriber(email);
+    return { status: 201, body: { status: 'subscribed' } };
+  }
 
   await ensureDataFile();
   if (await alreadySubscribed(email)) {
@@ -82,6 +103,12 @@ export async function startVerification(rawEmail) {
  * JSON-lines data file. Returns { status, body } — never throws.
  */
 export async function completeVerification(rawEmail, rawCode) {
+  // Only level 2 has a code step. Honouring one at level 1 would let a caller
+  // reach the "subscribed" response without the submit that level 1 stores on.
+  if (readGateLevel() !== GATE_VERIFY) {
+    return { status: 404, body: { error: 'The email gate is disabled.' } };
+  }
+
   const email = normalizeEmail(rawEmail);
   const code = typeof rawCode === 'string' ? rawCode.trim() : '';
   if (!email || !CODE_RE.test(code)) {
@@ -91,10 +118,6 @@ export async function completeVerification(rawEmail, rawCode) {
   const result = checkCode(email, code);
   if (!result.ok) return { status: 400, body: { error: result.error } };
 
-  await ensureDataFile();
-  if (!(await alreadySubscribed(email))) {
-    const entry = { email, subscribedAt: new Date().toISOString() };
-    await fs.appendFile(DATA_FILE, `${JSON.stringify(entry)}\n`);
-  }
+  await saveSubscriber(email);
   return { status: 201, body: { status: 'subscribed' } };
 }

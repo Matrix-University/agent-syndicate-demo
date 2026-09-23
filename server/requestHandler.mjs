@@ -48,7 +48,11 @@ export function handleStartVerificationRequest(req, res) {
   if (req.method !== 'POST') return methodNotAllowed(res);
   respondWith(res, async () => {
     const { email } = await readJsonBody(req);
-    return startVerification(email);
+    const result = await startVerification(email);
+    // Level 1 subscribes on submit, so the session begins here rather than at
+    // /verify. A 201 is the signal; level 2's 200 "code-sent" gets no cookie.
+    if (result.status === 201) res.setHeader('Set-Cookie', createSessionCookie(email.trim().toLowerCase()));
+    return result;
   });
 }
 

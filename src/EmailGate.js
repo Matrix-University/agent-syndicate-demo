@@ -2,6 +2,13 @@
 // server-side for the marketing list) or has already done so — remembered via
 // localStorage (fast path) and a signed session cookie (survives localStorage
 // being cleared, since it's set by and checked against the server).
+// Mirrors server/gateLevel.mjs, which is the source of truth for what these
+// mean. __EMAIL_GATE_LEVEL__ is inlined by vite.config.js from EMAIL_GATE_LEVEL.
+const GATE_OFF = 0;
+const GATE_COLLECT = 1;
+const GATE_VERIFY = 2;
+const BUILT_LEVEL = __EMAIL_GATE_LEVEL__;
+
 const STORAGE_KEY = 'agent-syndicate:subscribed-email';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_RE = /^\d{6}$/;
@@ -24,23 +31,43 @@ async function hasValidSession() {
   }
 }
 
-async function isGateEnabled() {
+/**
+ * Asks the server whether the gate is on and which form to show. The server's
+ * level wins over the built-in one: both read the same EMAIL_GATE_LEVEL, but
+ * only the server's answer reflects what /api/subscribe/* will actually store.
+ */
+async function fetchGateMode() {
+  const fallback = { enabled: true, level: BUILT_LEVEL }; // fail closed — see below
   try {
     const response = await fetch('/api/gate-status');
+    if (!response.ok) return fallback;
     const data = await response.json();
-    return data.enabled !== false; // fail open to "required" if the field is missing
+    return {
+      enabled: data.enabled !== false, // treat a missing field as "required"
+      level: data.level === GATE_COLLECT || data.level === GATE_VERIFY ? data.level : BUILT_LEVEL,
+    };
   } catch {
-    return true; // server unreachable — default to requiring verification
+    // Unreachable server — keep requiring the gate rather than letting a network
+    // failure become a way around it. Level 0 never gets this far.
+    return fallback;
   }
 }
 
 /**
- * Resolves once the player is allowed to play: immediately if the admin has
- * disabled the gate, or the player is already verified (localStorage or a
- * valid session cookie), otherwise after a successful code verification.
+ * Resolves once the player is allowed to play: immediately if the gate is off,
+ * or the player is already on the list (localStorage or a valid session
+ * cookie), otherwise once the form has been satisfied.
+ *
+ * Level 0 returns before touching the network, and because the level is inlined
+ * at build time the rest of this compiles away entirely. That matters: a static
+ * deploy has no server, so every /api/* call 404s and fetchGateMode fails closed
+ * — which would raise a prompt no player could ever get past.
  */
 export async function requestEmailAccess() {
-  if (!(await isGateEnabled())) return;
+  if (BUILT_LEVEL === GATE_OFF) return;
+
+  const mode = await fetchGateMode();
+  if (!mode.enabled) return;
 
   let alreadySubscribed = false;
   try {
@@ -62,11 +89,26 @@ export async function requestEmailAccess() {
   const codeSubmit = document.getElementById('email-gate-code-submit');
   const resendButton = document.getElementById('email-gate-resend');
 
+  // Level 1 stores the address on submit, so there is no code to send and the
+  // copy must not promise one.
+  if (mode.level === GATE_COLLECT) {
+    emailSubmit.textContent = 'ENTER';
+    document.getElementById('email-gate-copy').textContent =
+      "Enter your email to play the demo. We'll use it only for occasional " +
+      'updates about Agent Syndicate — no spam, unsubscribe anytime.';
+  }
+
   gate.hidden = false;
   emailInput.focus();
 
   return new Promise((resolve) => {
     let email = '';
+
+    function admit() {
+      rememberVerifiedEmail(email);
+      gate.hidden = true;
+      resolve();
+    }
 
     async function postJson(url, payload) {
       const response = await fetch(url, {
@@ -79,12 +121,15 @@ export async function requestEmailAccess() {
       return data;
     }
 
-    async function sendCode() {
+    /**
+     * Returns true when a code was sent and the second step should open. The
+     * server's reply decides, not mode.level, so a level the client guessed
+     * wrong still ends up on the right step.
+     */
+    async function submitEmail() {
       const data = await postJson('/api/subscribe/start', { email });
-      if (data.status === 'already-subscribed') {
-        rememberVerifiedEmail(email);
-        gate.hidden = true;
-        resolve();
+      if (data.status === 'subscribed' || data.status === 'already-subscribed') {
+        admit();
         return false;
       }
       return true;
@@ -100,11 +145,12 @@ export async function requestEmailAccess() {
 
       email = candidate;
       emailError.textContent = '';
+      const submitLabel = emailSubmit.textContent;
       emailSubmit.disabled = true;
-      emailSubmit.textContent = 'SENDING…';
+      emailSubmit.textContent = mode.level === GATE_COLLECT ? 'SAVING…' : 'SENDING…';
       try {
-        const stillPending = await sendCode();
-        if (stillPending) {
+        const codeSent = await submitEmail();
+        if (codeSent) {
           emailStep.hidden = true;
           codeStep.hidden = false;
           codeInput.focus();
@@ -113,7 +159,7 @@ export async function requestEmailAccess() {
         emailError.textContent = err.message;
       } finally {
         emailSubmit.disabled = false;
-        emailSubmit.textContent = 'SEND CODE';
+        emailSubmit.textContent = submitLabel;
       }
     });
 
@@ -130,9 +176,7 @@ export async function requestEmailAccess() {
       codeSubmit.textContent = 'VERIFYING…';
       try {
         await postJson('/api/subscribe/verify', { email, code });
-        rememberVerifiedEmail(email);
-        gate.hidden = true;
-        resolve();
+        admit();
       } catch (err) {
         codeError.textContent = err.message;
         codeSubmit.disabled = false;
@@ -144,7 +188,7 @@ export async function requestEmailAccess() {
       codeError.textContent = '';
       resendButton.disabled = true;
       try {
-        await sendCode();
+        await submitEmail();
       } catch (err) {
         codeError.textContent = err.message;
       } finally {

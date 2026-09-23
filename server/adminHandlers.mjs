@@ -2,6 +2,7 @@
 // and the CSV export. Shared by the Vite dev middleware and the production server.
 import { checkAdminPassword, createAdminSessionCookie, clearAdminSessionCookie, isAdminRequest } from './adminAuth.mjs';
 import { isEmailGateEnabled, setEmailGateEnabled } from './settings.mjs';
+import { readGateLevel, GATE_OFF } from './gateLevel.mjs';
 import { buildEmailsCsv } from './emailsExport.mjs';
 
 const MAX_BODY_BYTES = 1_000;
@@ -67,7 +68,7 @@ export function handleAdminMeRequest(req, res) {
 export async function handleAdminGateRequest(req, res) {
   if (req.method === 'GET') {
     if (!requireAdmin(req, res)) return;
-    return sendJson(res, 200, { enabled: await isEmailGateEnabled() });
+    return sendJson(res, 200, { enabled: await isEmailGateEnabled(), level: readGateLevel() });
   }
 
   if (req.method === 'POST') {
@@ -94,8 +95,15 @@ export async function handleAdminEmailsCsvRequest(req, res) {
   res.end(csv);
 }
 
-/** Public — lets the client know whether it needs to show the email gate at all. */
+/**
+ * Public — tells the client whether to show the gate and, if so, which form to
+ * render. The server's level is authoritative: the client is built with the same
+ * value, but only what this reports matches what the endpoints will actually do.
+ */
 export async function handleGateStatusRequest(req, res) {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'Method not allowed.' });
-  sendJson(res, 200, { enabled: await isEmailGateEnabled() });
+  const level = readGateLevel();
+  // Level 0 wins over the stored toggle — there is no gate to enable.
+  const enabled = level !== GATE_OFF && (await isEmailGateEnabled());
+  sendJson(res, 200, { enabled, level });
 }

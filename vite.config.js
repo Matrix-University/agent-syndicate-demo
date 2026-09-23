@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { readGateLevel, GATE_OFF } from './server/gateLevel.mjs';
 import { handleStartVerificationRequest, handleCompleteVerificationRequest, handleSessionCheckRequest } from './server/requestHandler.mjs';
 import {
   handleAdminLoginRequest,
@@ -35,14 +36,23 @@ function emailSubscribeDevMiddleware() {
   };
 }
 
+// EMAIL_GATE_LEVEL (see server/gateLevel.mjs) is read here as well as by the
+// server so one setting drives both. Level 0 means no gate and no dashboard, so
+// admin.html is left out of the build entirely — a 404 beats a login page whose
+// POST no /api/admin/* route would answer. `npm run dev` always serves it.
+const gateLevel = readGateLevel();
+
 export default defineConfig({
   server: { open: true },
   plugins: [emailSubscribeDevMiddleware()],
+  // Inlined so level 0 compiles the gate out rather than shipping dead code that
+  // would call /api/* on a static deploy that has no server to answer.
+  define: { __EMAIL_GATE_LEVEL__: JSON.stringify(gateLevel) },
   build: {
     rollupOptions: {
       input: {
         main: 'index.html',
-        admin: 'admin.html',
+        ...(gateLevel === GATE_OFF ? {} : { admin: 'admin.html' }),
       },
     },
   },

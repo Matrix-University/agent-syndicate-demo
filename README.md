@@ -38,12 +38,26 @@ npm run dev -- --host
 
 ## Email gate
 
-The email gate is **disabled by default** so the game remains playable before
-an SMTP relay is configured. Once the relay is ready, an admin can enable it
-from `/admin.html`. When enabled, visitors must verify an email address with a
-6-digit code sent to it. Verified addresses are appended to
-`data/emails.jsonl` (gitignored) for the site owner to use as a marketing list
-— see [data/README.md](data/README.md).
+The gate has three levels, set with `EMAIL_GATE_LEVEL` (see `.env.example` and
+`server/gateLevel.mjs`). It is **level 0 — off — by default**, so the game stays
+playable before an SMTP relay exists:
+
+| Level | Player sees | Address is stored | Needs SMTP | `/admin.html` |
+| --- | --- | --- | --- | --- |
+| `0` off | nothing — straight to the game | never | no | not built |
+| `1` collect | email form | on submit, **unverified** | no | built |
+| `2` verify | email form, then a 6-digit code | only once the code matches | yes | built |
+
+Level 1 is the one to run before a relay is working: it collects a list without
+being able to send anything, at the cost of addresses nobody has proven they own.
+Level 2 is the real gate. Stored addresses are appended to `data/emails.jsonl`
+(gitignored) for the site owner to use as a marketing list — see
+[data/README.md](data/README.md).
+
+The level is read **both** by the build and by the server, so changing it means a
+rebuild, not just a restart. The server is authoritative: at level 1
+`/api/subscribe/verify` refuses, and at level 0 both subscribe endpoints refuse,
+whatever a client asks for.
 Returning players aren't asked again: the browser remembers verified addresses
 in `localStorage`, backed by a signed, httpOnly session cookie (~180 days) set
 by the server, so they're still recognized even if `localStorage` is cleared.
@@ -144,33 +158,49 @@ server. The current production setup requires `server/index.mjs` to run as a
 long-lived Node process because it serves the API, writes the email data file,
 stores pending verification codes, and serves the admin dashboard API.
 
-If Vercel only serves the static `dist/` files, the current game and
-`/admin.html` dashboard will not work correctly because the client still needs
-the API endpoints. Use a separate VPS for the Node API and persistent data,
-with Postfix added later, or plan a separate serverless rewrite with persistent
-storage before deploying this feature on Vercel. Vercel environment variables
-are only useful once that API deployment architecture exists:
+When Vercel only serves the static `dist/` files, every `/api/*` route 404s.
+At the default `EMAIL_GATE_LEVEL=0` that is fine: the gate and the dashboard are
+both compiled out, the bundle makes no `/api/*` calls at all, and players go
+straight to the game.
 
-- Gate disabled, static game only: no SMTP variables; no admin variables unless
-  a separate API handles the dashboard.
-- Dashboard/API hosted on your own Node server: set `SESSION_SECRET` and
-  `ADMIN_PASSWORD` there; keep SMTP variables unset until email is ready.
-- Email gate enabled: add the production `SMTP_*` variables to the server that
-  runs the API, not merely to a static Vercel project.
+**Do not deploy level 1 or 2 to a static host.** Both raise a form that posts to
+`/api/subscribe/start`, which 404s there, so nobody can get past it and nothing
+is collected. Both also build `/admin.html`, whose login posts to
+`/api/admin/login` — it would reject every correct password. Setting
+`ADMIN_PASSWORD` in the Vercel dashboard does not change that; env vars only
+reach code that runs, and no server-side code runs. Use a separate VPS for the
+Node API and persistent data, with Postfix added later, or plan a separate
+serverless rewrite with persistent storage before deploying those levels on
+Vercel. Vercel environment variables are only useful once that API deployment
+architecture exists:
+
+- Static game only (`EMAIL_GATE_LEVEL=0`, the default): no SMTP variables, and
+  no admin variables unless a separate API handles the dashboard.
+- Dashboard/API hosted on your own Node server: build and run with
+  `EMAIL_GATE_LEVEL=1` and set `SESSION_SECRET` and `ADMIN_PASSWORD` there; keep
+  SMTP variables unset until email is ready. `SESSION_SECRET` is required —
+  without it login returns a generic "Invalid request." even when the password
+  is correct.
+- Verified gate: `EMAIL_GATE_LEVEL=2`, plus the production `SMTP_*` variables on
+  the server that runs the API, not merely on a static Vercel project.
 
 This also means **`npm run build` alone is not enough to deploy** — the built
 app needs the verification endpoints behind it:
 
 ```bash
-npm run build
-npm start          # serves dist/ + the email endpoints on http://localhost:4173
+EMAIL_GATE_LEVEL=1 npm run build   # 0 (default) omits the gate and /admin.html
+EMAIL_GATE_LEVEL=1 npm start       # serves dist/ + the API on :4173
 ```
+
+The same level must be set for both commands — the build bakes it into the
+bundle, the server enforces it at runtime, and they are meant to agree. Putting
+`EMAIL_GATE_LEVEL` in `.env` covers both.
 
 `npm run dev` and `npm start` both handle `/api/subscribe/start`,
 `/api/subscribe/verify`, and `/api/session` (via shared handlers in `server/`),
-so the gate works locally as soon as `.env` is set up. Without SMTP, leave the
-gate disabled or use the documented `SMTP_CONSOLE_FALLBACK=true` development
-option; do not enable the gate in production until real delivery is working.
+so the gate works locally as soon as `.env` is set up. Without SMTP, run level 1
+or use the documented `SMTP_CONSOLE_FALLBACK=true` development option; do not
+run level 2 in production until real delivery is working.
 
 ## Admin dashboard
 
@@ -182,16 +212,24 @@ For production, use:
 
 [https://your-domain.com/admin.html](https://your-domain.com/admin.html)
 
-The production server must be running with `npm start`, and `ADMIN_PASSWORD` must be set in .env.
+Production needs all three: the build must include the page (any
+`EMAIL_GATE_LEVEL` above 0 — at level 0 `/admin.html` is not in `dist/` and the
+Node server falls back to serving the game there), `npm start` must be running
+to answer `/api/admin/*`, and `ADMIN_PASSWORD` plus `SESSION_SECRET` must be set
+in `.env`. Dev needs none of it — `npm run dev` always serves the dashboard.
 
 Visit `/admin.html` to log in (set `ADMIN_PASSWORD` and `SESSION_SECRET` in
 `.env`) and:
 
-- Toggle the email gate on/off. Off, players skip straight to the game; the
-  setting is persisted in `data/settings.json` (gitignored) and survives a
-  restart.
-- Download everyone who's verified so far as a CSV, for an email marketing
-  tool — `/api/admin/emails.csv`, converted from `data/emails.jsonl`.
+- See which level is live. It is read-only here — the level comes from
+  `EMAIL_GATE_LEVEL` and changing it needs a rebuild — but it tells you whether
+  the addresses below were verified (level 2) or merely typed in (level 1).
+- Toggle the email gate on/off, to pause collection without a rebuild. Off,
+  players skip straight to the game; the setting is persisted in
+  `data/settings.json` (gitignored) and survives a restart. It defaults to on,
+  and has no effect at level 0.
+- Download everyone collected so far as a CSV, for an email marketing tool —
+  `/api/admin/emails.csv`, converted from `data/emails.jsonl`.
 
 Login uses a signed, httpOnly session cookie (12 hours) with a 15-minute
 lockout after 5 failed password attempts. `ADMIN_PASSWORD` is a single shared

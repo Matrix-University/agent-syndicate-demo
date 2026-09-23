@@ -8,6 +8,7 @@ const loginSubmit = document.getElementById('login-submit');
 const dashboardSection = document.getElementById('dashboard-section');
 const gateToggle = document.getElementById('gate-toggle');
 const gateError = document.getElementById('gate-error');
+const gateLevelNote = document.getElementById('gate-level');
 const logoutButton = document.getElementById('logout-button');
 
 async function postJson(url, payload) {
@@ -31,11 +32,19 @@ function showLogin() {
   dashboardSection.hidden = true;
 }
 
+// Read-only: the level is set by EMAIL_GATE_LEVEL at build/start, not from here.
+// Showing it matters because it decides whether stored addresses were verified.
+const LEVEL_NOTES = {
+  1: 'Level 1 (collect) — addresses are saved as soon as the form is submitted, so they are unverified. No SMTP needed.',
+  2: 'Level 2 (verify) — addresses are saved only after the emailed 6-digit code matches, so every entry is confirmed.',
+};
+
 async function loadGateStatus() {
   try {
     const response = await fetch('/api/admin/gate');
     const data = await response.json();
     gateToggle.checked = Boolean(data.enabled);
+    gateLevelNote.textContent = LEVEL_NOTES[data.level] || 'Gate level unknown — check EMAIL_GATE_LEVEL on the server.';
   } catch {
     gateError.textContent = 'Could not load the current setting.';
   }

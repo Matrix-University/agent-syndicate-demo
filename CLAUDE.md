@@ -237,12 +237,32 @@ button there, not another branch.
 
 ## Email gate & mail server
 
-Playing requires verifying an email via a 6-digit code (`src/EmailGate.js` +
-`server/`), sent over a self-hosted SMTP relay (`server/mailer.mjs`, via
-`nodemailer`) — no 3rd-party email API. Before touching `server/mailer.mjs`,
-`.env.example`'s `SMTP_*` vars, or Postfix config, read and follow
-[docs/postfix-security.md](docs/postfix-security.md): it covers header
-injection, open-relay, TLS, and rate-limiting requirements for that relay.
+The gate (`src/EmailGate.js` + `server/`) has **three levels**, defined once in
+`server/gateLevel.mjs` and selected by `EMAIL_GATE_LEVEL`: `0` off (no gate, no
+dashboard), `1` collect (the form stores the address on submit, no SMTP), `2`
+verify (a 6-digit code over a self-hosted SMTP relay — `server/mailer.mjs`, via
+`nodemailer`, no 3rd-party email API). Default is 0.
+
+**One setting, read in two places — keep them in step.** `vite.config.js` inlines
+the level as `__EMAIL_GATE_LEVEL__` (so level 0 dead-code-eliminates the gate and
+drops `admin.html` from the build inputs), and the server reads it at runtime.
+**The server is authoritative**: `startVerification`/`completeVerification` each
+re-check the level and refuse what that level doesn't allow, so a crafted request
+can't skip level 2's code step or reach a disabled gate. Don't move that check
+into the client, and don't add a level without extending `gateLevel.mjs`.
+
+The client picks its form from `/api/gate-status`'s `level`, then branches on the
+*response* (`subscribed` → let them in, `code-sent` → show the code step) rather
+than on what it was built with — so a build/server mismatch still lands on the
+right step. Level 1 issues the session cookie from `/api/subscribe/start`, level 2
+from `/api/subscribe/verify`; both are the `201`.
+
+The admin toggle (`data/settings.json`) only pauses collection at levels 1–2; it
+defaults to **on** because the level already decides whether a gate exists.
+
+Before touching `server/mailer.mjs`, `.env.example`'s `SMTP_*` vars, or Postfix
+config, read and follow [docs/postfix-security.md](docs/postfix-security.md): it
+covers header injection, open-relay, TLS, and rate-limiting requirements.
 
 ## Code style
 
