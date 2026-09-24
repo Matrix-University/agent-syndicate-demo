@@ -18,6 +18,7 @@
     "clips": "node scripts/list-clips.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "nodemailer": "^10.0.10",
     "three": "^0.160.0"
   },

@@ -151,38 +151,46 @@ real signups. See [docs/postfix-security.md](docs/postfix-security.md).
 Never commit `.env`, SMTP credentials, admin passwords, session secrets, or
 `data/emails.jsonl`. `.env.example` contains names and safe placeholders only.
 
-### Vercel deployment note
+### Deploying to Vercel
 
-Adding variables in the Vercel dashboard does not run this project's Node
-server. The current production setup requires `server/index.mjs` to run as a
-long-lived Node process because it serves the API, writes the email data file,
-stores pending verification codes, and serves the admin dashboard API.
+Levels 1 and 2 need a server and somewhere to write. Vercel supplies both, but
+not the way `npm start` does: the API runs as a serverless function
+(`api/[...path].js`, which mounts the same handlers in `server/`), and the
+filesystem is **read-only**, so `data/emails.jsonl` and `data/settings.json`
+cannot be written there.
 
-When Vercel only serves the static `dist/` files, every `/api/*` route 404s.
-At the default `EMAIL_GATE_LEVEL=0` that is fine: the gate and the dashboard are
-both compiled out, the bundle makes no `/api/*` calls at all, and players go
-straight to the game.
+Setting `DATABASE_URL` switches every storage module to Postgres — addresses,
+the gate toggle, and level 2's pending codes. The Neon marketplace integration
+injects that variable, and billing stays on your existing Vercel invoice rather
+than becoming a second subscription. Leave `DATABASE_URL` unset and the original
+file-backed behaviour is unchanged, so `npm run dev` and `npm start` still need
+no database.
 
-**Do not deploy level 1 or 2 to a static host.** Both raise a form that posts to
-`/api/subscribe/start`, which 404s there, so nobody can get past it and nothing
-is collected. Both also build `/admin.html`, whose login posts to
-`/api/admin/login` — it would reject every correct password. Setting
-`ADMIN_PASSWORD` in the Vercel dashboard does not change that; env vars only
-reach code that runs, and no server-side code runs. Use a separate VPS for the
-Node API and persistent data, with Postfix added later, or plan a separate
-serverless rewrite with persistent storage before deploying those levels on
-Vercel. Vercel environment variables are only useful once that API deployment
-architecture exists:
+Full setup, the variables to set, cost, and the serverless caveats are in
+[docs/vercel-deployment.md](docs/vercel-deployment.md).
 
-- Static game only (`EMAIL_GATE_LEVEL=0`, the default): no SMTP variables, and
-  no admin variables unless a separate API handles the dashboard.
-- Dashboard/API hosted on your own Node server: build and run with
-  `EMAIL_GATE_LEVEL=1` and set `SESSION_SECRET` and `ADMIN_PASSWORD` there; keep
-  SMTP variables unset until email is ready. `SESSION_SECRET` is required —
+At the default `EMAIL_GATE_LEVEL=0` none of that is needed: the gate and the
+dashboard are compiled out, the bundle makes no `/api/*` calls, and a plain
+static deploy works.
+
+**A static host with no API still cannot serve levels 1 or 2.** Both raise a
+form that posts to `/api/subscribe/start` and both build `/admin.html`, whose
+login posts to `/api/admin/login`; without something answering those routes
+nobody gets past the gate and no correct password is accepted. Setting
+`ADMIN_PASSWORD` in a dashboard does not change that — env vars only reach code
+that runs. Either deploy the `api/` function alongside the static build, or run
+`server/index.mjs` on your own host.
+
+Which variables matter where:
+
+- Static game only (`EMAIL_GATE_LEVEL=0`, the default): none.
+- Vercel, levels 1–2: `EMAIL_GATE_LEVEL`, `SESSION_SECRET`, `ADMIN_PASSWORD`,
+  and `DATABASE_URL` from the Neon integration. `SESSION_SECRET` is required —
   without it login returns a generic "Invalid request." even when the password
   is correct.
-- Verified gate: `EMAIL_GATE_LEVEL=2`, plus the production `SMTP_*` variables on
-  the server that runs the API, not merely on a static Vercel project.
+- Your own Node server, levels 1–2: the same, minus `DATABASE_URL` if you are
+  happy with the local data files.
+- Verified gate (level 2) anywhere: add the production `SMTP_*` variables.
 
 This also means **`npm run build` alone is not enough to deploy** — the built
 app needs the verification endpoints behind it:

@@ -257,8 +257,26 @@ than on what it was built with — so a build/server mismatch still lands on the
 right step. Level 1 issues the session cookie from `/api/subscribe/start`, level 2
 from `/api/subscribe/verify`; both are the `201`.
 
-The admin toggle (`data/settings.json`) only pauses collection at levels 1–2; it
-defaults to **on** because the level already decides whether a gate exists.
+The admin toggle only pauses collection at levels 1–2; it defaults to **on**
+because the level already decides whether a gate exists.
+
+**Storage has two backends, chosen by one check.** `server/db.mjs`'s
+`isDatabaseConfigured()` is just "is `DATABASE_URL` set?", and three modules
+branch on it: `subscriberStore.mjs` (addresses), `settings.mjs` (the toggle) and
+`verificationStore.mjs` (level 2's pending codes) each use Postgres when it is
+set and their original file/in-memory path when it is not. Keep that fallback —
+it is what lets `npm run dev` and `npm start` run with no database. Nothing
+outside those three modules should know which backend is live, and new gate
+state needs both paths, not just the SQL one. `ensureSchema()` creates the
+tables on first use (all `IF NOT EXISTS`), so there is no migration step.
+
+**The routes are mounted in three places and must agree:** the Vite middleware
+in `vite.config.js` (dev), `server/index.mjs` (`npm start`), and
+`api/[...path].js` (Vercel's catch-all function). Adding or renaming an endpoint
+means editing all three. Read bodies with `server/jsonBody.mjs` rather than
+consuming the request stream directly — Vercel parses the body before the
+handler runs and leaves the stream drained, so a hand-rolled reader gets nothing
+there. See [docs/vercel-deployment.md](docs/vercel-deployment.md).
 
 Before touching `server/mailer.mjs`, `.env.example`'s `SMTP_*` vars, or Postfix
 config, read and follow [docs/postfix-security.md](docs/postfix-security.md): it

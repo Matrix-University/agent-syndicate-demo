@@ -4,29 +4,9 @@ import { checkAdminPassword, createAdminSessionCookie, clearAdminSessionCookie, 
 import { isEmailGateEnabled, setEmailGateEnabled } from './settings.mjs';
 import { readGateLevel, GATE_OFF } from './gateLevel.mjs';
 import { buildEmailsCsv } from './emailsExport.mjs';
+import { readJsonBody } from './jsonBody.mjs';
 
 const MAX_BODY_BYTES = 1_000;
-
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > MAX_BODY_BYTES) {
-        req.destroy();
-        reject(new Error('Request body too large.'));
-      }
-    });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body || '{}'));
-      } catch {
-        reject(new Error('Invalid JSON body.'));
-      }
-    });
-    req.on('error', reject);
-  });
-}
 
 function sendJson(res, status, body) {
   res.statusCode = status;
@@ -43,7 +23,7 @@ function requireAdmin(req, res) {
 export async function handleAdminLoginRequest(req, res) {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
   try {
-    const { password } = await readJsonBody(req);
+    const { password } = await readJsonBody(req, MAX_BODY_BYTES);
     const result = checkAdminPassword(password);
     if (!result.ok) return sendJson(res, 401, { error: result.error });
 
@@ -74,7 +54,7 @@ export async function handleAdminGateRequest(req, res) {
   if (req.method === 'POST') {
     if (!requireAdmin(req, res)) return;
     try {
-      const { enabled } = await readJsonBody(req);
+      const { enabled } = await readJsonBody(req, MAX_BODY_BYTES);
       return sendJson(res, 200, { enabled: await setEmailGateEnabled(enabled) });
     } catch {
       return sendJson(res, 400, { error: 'Invalid request.' });

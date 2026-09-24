@@ -8,6 +8,19 @@ All notable changes to this project are documented in this file, which follows
 
 ### Added
 
+- The email gate can now run on Vercel. The API is mounted as a serverless
+  function (`api/[...path].js`) alongside the static build, and setting
+  `DATABASE_URL` moves everything the gate persists — collected addresses, the
+  admin toggle, and level 2's pending codes — into Postgres, which a read-only
+  serverless filesystem cannot hold on disk. Provisioned through the Neon
+  marketplace integration, so it bills on the existing Vercel invoice rather
+  than a second subscription. Leave `DATABASE_URL` unset and nothing changes:
+  `npm run dev` and `npm start` still use the local data files and need no
+  database.
+- [docs/vercel-deployment.md](docs/vercel-deployment.md): why the file-backed
+  storage cannot work on a serverless host, how the backend is selected, the
+  environment variables to set, what it costs, and the caveats that come with
+  running the gate across short-lived instances.
 - The email gate now defaults to disabled, so the game remains playable while
   SMTP is not configured. Enable it from `/admin.html` only after the
   production relay is ready. Missing admin secrets now produce an unauthorized
@@ -50,6 +63,21 @@ All notable changes to this project are documented in this file, which follows
 
 ### Changed
 
+- Everything the email gate persists now goes through a storage module with two
+  backends, picked by whether `DATABASE_URL` is set: `server/subscriberStore.mjs`
+  for addresses, `server/settings.mjs` for the admin toggle, and
+  `server/verificationStore.mjs` for pending codes. Callers no longer touch the
+  filesystem directly, and the tables are created on first use, so there is no
+  migration step. Storing an address is now atomic — the old read-then-append
+  could drop a signup when two arrived together.
+- Level 2's pending verification codes are no longer held in process memory when
+  a database is configured. Across serverless instances the one checking a code
+  is not the one that sent it, so the TTL, resend cooldown and attempt count now
+  live in a row rather than a `Map`.
+- Request bodies are read through `server/jsonBody.mjs`, shared by both handler
+  modules instead of duplicated in each. It prefers a body the host has already
+  parsed: Vercel's Node runtime parses it before the handler runs and leaves the
+  stream drained, which would otherwise have made every POST look empty.
 - The car throw is now a two-handed overhead heave instead of a one-armed toss.
   The library's only throw is a grenade throw, so bound to the car it played as a
   punch thrown while the car floated overhead. The new `Throw_Overhead` is authored

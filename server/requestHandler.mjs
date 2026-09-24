@@ -2,29 +2,9 @@
 // response. Shared by the Vite dev middleware and the standalone production server.
 import { startVerification, completeVerification } from './subscribeHandler.mjs';
 import { createSessionCookie, readSessionEmail } from './session.mjs';
+import { readJsonBody } from './jsonBody.mjs';
 
 const MAX_BODY_BYTES = 10_000; // an email + code is a few dozen bytes; this is generous
-
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk;
-      if (body.length > MAX_BODY_BYTES) {
-        req.destroy();
-        reject(new Error('Request body too large.'));
-      }
-    });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body || '{}'));
-      } catch {
-        reject(new Error('Invalid JSON body.'));
-      }
-    });
-    req.on('error', reject);
-  });
-}
 
 async function respondWith(res, work) {
   res.setHeader('Content-Type', 'application/json');
@@ -47,7 +27,7 @@ function methodNotAllowed(res) {
 export function handleStartVerificationRequest(req, res) {
   if (req.method !== 'POST') return methodNotAllowed(res);
   respondWith(res, async () => {
-    const { email } = await readJsonBody(req);
+    const { email } = await readJsonBody(req, MAX_BODY_BYTES);
     const result = await startVerification(email);
     // Level 1 subscribes on submit, so the session begins here rather than at
     // /verify. A 201 is the signal; level 2's 200 "code-sent" gets no cookie.
@@ -59,7 +39,7 @@ export function handleStartVerificationRequest(req, res) {
 export function handleCompleteVerificationRequest(req, res) {
   if (req.method !== 'POST') return methodNotAllowed(res);
   respondWith(res, async () => {
-    const { email, code } = await readJsonBody(req);
+    const { email, code } = await readJsonBody(req, MAX_BODY_BYTES);
     const result = await completeVerification(email, code);
     if (result.status === 201) res.setHeader('Set-Cookie', createSessionCookie(email.trim().toLowerCase()));
     return result;

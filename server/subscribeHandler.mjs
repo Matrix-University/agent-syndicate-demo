@@ -1,13 +1,9 @@
 // Email capture logic used by both the Vite dev middleware (vite.config.js) and
 // the standalone production server (server/index.mjs), so the two never drift.
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { sendVerificationEmail } from './mailer.mjs';
 import { generateCode, recordSend, checkCode } from './verificationStore.mjs';
 import { readGateLevel, GATE_OFF, GATE_COLLECT, GATE_VERIFY } from './gateLevel.mjs';
-
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'emails.jsonl');
+import { hasSubscriber, addSubscriber } from './subscriberStore.mjs';
 
 // Intentionally permissive (format only, no DNS/MX check) — this is a marketing
 // opt-in gate, not an account system; rejecting too aggressively just loses signups.
@@ -18,42 +14,6 @@ const CODE_RE = /^\d{6}$/;
 function normalizeEmail(rawEmail) {
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
   return email && email.length <= MAX_EMAIL_LENGTH && EMAIL_RE.test(email) ? email : null;
-}
-
-async function ensureDataFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(DATA_FILE);
-  } catch {
-    await fs.writeFile(DATA_FILE, '');
-  }
-}
-
-async function alreadySubscribed(email) {
-  let content;
-  try {
-    content = await fs.readFile(DATA_FILE, 'utf8');
-  } catch {
-    return false;
-  }
-  return content
-    .split('\n')
-    .filter(Boolean)
-    .some((line) => {
-      try {
-        return JSON.parse(line).email === email;
-      } catch {
-        return false;
-      }
-    });
-}
-
-/** Appends the address unless it is already on the list. Idempotent by email. */
-async function saveSubscriber(email) {
-  await ensureDataFile();
-  if (await alreadySubscribed(email)) return;
-  const entry = { email, subscribedAt: new Date().toISOString() };
-  await fs.appendFile(DATA_FILE, `${JSON.stringify(entry)}\n`);
 }
 
 /**
@@ -72,18 +32,17 @@ export async function startVerification(rawEmail) {
 
   // Level 1 has no second step, so the submit itself is the subscription.
   if (level === GATE_COLLECT) {
-    await saveSubscriber(email);
+    await addSubscriber(email);
     return { status: 201, body: { status: 'subscribed' } };
   }
 
-  await ensureDataFile();
-  if (await alreadySubscribed(email)) {
+  if (await hasSubscriber(email)) {
     return { status: 200, body: { status: 'already-subscribed' } };
   }
 
   const code = generateCode();
   try {
-    recordSend(email, code);
+    await recordSend(email, code);
   } catch (err) {
     return { status: 429, body: { error: err.message } };
   }
@@ -99,8 +58,8 @@ export async function startVerification(rawEmail) {
 }
 
 /**
- * Confirms a submitted code and, once correct, appends the email to the
- * JSON-lines data file. Returns { status, body } — never throws.
+ * Confirms a submitted code and, once correct, stores the email. Returns
+ * { status, body } — never throws.
  */
 export async function completeVerification(rawEmail, rawCode) {
   // Only level 2 has a code step. Honouring one at level 1 would let a caller
@@ -115,9 +74,9 @@ export async function completeVerification(rawEmail, rawCode) {
     return { status: 400, body: { error: 'Enter the 6-digit code.' } };
   }
 
-  const result = checkCode(email, code);
+  const result = await checkCode(email, code);
   if (!result.ok) return { status: 400, body: { error: result.error } };
 
-  await saveSubscriber(email);
+  await addSubscriber(email);
   return { status: 201, body: { status: 'subscribed' } };
 }

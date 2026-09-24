@@ -1,8 +1,7 @@
-// Converts data/emails.jsonl into a CSV for the admin dashboard's download button.
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
-const DATA_FILE = path.resolve(process.cwd(), 'data', 'emails.jsonl');
+// Converts the collected addresses into a CSV for the admin dashboard's
+// download button. The rows come from subscriberStore.mjs, so this works the
+// same against Postgres and the local JSON-lines file.
+import { listSubscribers } from './subscriberStore.mjs';
 
 function csvEscape(value) {
   const str = String(value ?? '');
@@ -10,25 +9,7 @@ function csvEscape(value) {
 }
 
 export async function buildEmailsCsv() {
-  let content;
-  try {
-    content = await fs.readFile(DATA_FILE, 'utf8');
-  } catch {
-    content = '';
-  }
-
-  const rows = content
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-
+  const rows = await listSubscribers();
   const lines = rows.map((row) => `${csvEscape(row.email)},${csvEscape(row.subscribedAt)}`);
   return `${['email', 'subscribedAt'].join(',')}\n${lines.join('\n')}\n`;
 }
