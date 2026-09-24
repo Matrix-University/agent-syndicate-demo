@@ -13,6 +13,7 @@ import {
 } from './PlayerProfile.js';
 import { HandleDialog } from './HandleDialog.js';
 import { RemoteScores } from './RemoteScores.js';
+import { Radio } from './Radio.js';
 
 const PLAYER_SPAWN = new THREE.Vector3(-27.5, 0, 51);
 const PLAYER_SPAWN_YAW = Math.PI;
@@ -126,6 +127,7 @@ export class Game {
       punchPressed: false,
       liftPressed: false,
     };
+    this.radio = new Radio({ root: document.getElementById('radio') });
     this._liftPromptText = '';
     this._disposed = false;
 
@@ -172,6 +174,7 @@ export class Game {
       return;
     }
     if (!this.gameOver) this.sessionTime += dt;
+    if (this.input.radioMutePressed) this.radio.toggleMute();
     const canRetry = this.gameOver && !this.gameOverPanel.hidden;
     if (canRetry && (this.input.restartPressed || this.input.punchPressed)) this._restart();
 
@@ -259,6 +262,8 @@ export class Game {
   _updateHandleHud() {
     const handle = this.profile.handle || 'UNSET';
     this.runHandle.textContent = handle;
+    // Also the game-over headline, which the post-run name prompt sits over.
+    this.gameOverHandle.textContent = handle;
     this.playerHealthMeter.setAttribute('aria-label', `${handle} health`);
   }
 
@@ -355,7 +360,6 @@ export class Game {
     this._sessionId += 1;
     this._sessionRun = count > 0 ? { kills: count, seconds } : null;
 
-    this.gameOverHandle.textContent = `HANDLE // ${this.profile.handle || 'UNSET'}`;
     this.gameOverScore.textContent =
       `${count} ${count === 1 ? 'AGENT' : 'AGENTS'} NEUTRALIZED`;
     this.gameOverSession.textContent = `SESSION ${formatDuration(this.sessionTime)}`;
@@ -456,6 +460,7 @@ export class Game {
       window.visualViewport?.removeEventListener('resize', this._onResize);
       this.handleEditButton.removeEventListener('click', this._onHandleEdit);
       this.handleDialog.dispose();
+      this.radio.dispose();
       this.mobileControls.dispose();
       this.input.dispose();
       this.followCam.dispose();

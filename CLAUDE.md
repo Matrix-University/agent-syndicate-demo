@@ -39,6 +39,7 @@ src/ThirdPersonCamera.js smooth follow camera
 src/Input.js             keyboard state + movement axes
 src/PlayerProfile.js     handle + personal best, in localStorage
 src/HandleDialog.js      the "choose your handle" overlay
+src/Radio.js             RFZAMP, the Winamp-style Radio Free Zion player (DOM audio + now-playing feed)
 ```
 
 **Load-bearing design choice — do not break it:** `Player.root` is what moves

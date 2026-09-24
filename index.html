@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Agent Syndicate — Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
     <style>
       :root {
         --matrix-green: #39ff14;
@@ -30,10 +33,11 @@
       #hud-heading {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 10px;
-        width: fit-content;
+        max-width: min(340px, 100%);
       }
-      #instructions-toggle {
+      .hud-button {
         flex: 0 0 72px;
         width: 72px;
         height: 28px;
@@ -47,12 +51,25 @@
         pointer-events: auto;
         cursor: pointer;
       }
-      #instructions-toggle:hover,
-      #instructions-toggle:focus-visible {
+      .hud-button:hover,
+      .hud-button:focus-visible {
         border-color: var(--matrix-green);
         outline: 2px solid rgba(57, 255, 20, 0.45);
         outline-offset: 2px;
       }
+      #instructions-minimize {
+        flex-basis: 60px;
+        width: 60px;
+      }
+      #control-instructions {
+        box-sizing: border-box;
+        max-width: min(300px, 100%);
+        margin-top: 3px;
+        padding-right: 8px;
+        overflow-wrap: anywhere;
+        white-space: normal;
+      }
+      #control-instructions[hidden] { display: none; }
       #combat-hud {
         width: min(230px, calc(100vw - 32px));
         margin-top: 10px;
@@ -221,9 +238,26 @@
         line-height: 1;
         letter-spacing: 0;
       }
+      /* The handle is the headline, set bigger than GAME OVER: it's the name
+         going on the board. clamp() keeps a 14-character handle on one line. */
       #game-over-handle {
-        font-size: 0.9375rem;
+        max-width: 100%;
+        color: #efffec;
+        font-size: clamp(1.75rem, 9vw, 3.75rem);
+        font-weight: 700;
+        line-height: 1;
         letter-spacing: 2px;
+        overflow-wrap: anywhere;
+      }
+      #game-over-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 18px;
+        border: 1px solid var(--matrix-green);
+        border-radius: 4px;
+        background: rgba(4, 8, 6, 0.78);
+        box-shadow: 0 0 12px rgba(57, 255, 20, 0.25), inset 0 0 10px rgba(57, 255, 20, 0.1);
       }
       #game-over-score { font-size: 1rem; }
       #game-over-session { color: #d7ffd0; font-size: 0.875rem; }
@@ -351,7 +385,8 @@
       @media (max-height: 560px) {
         #game-over { gap: 6px; }
         #game-over-title { font-size: 1.75rem; }
-        #game-over-handle { font-size: 0.8125rem; }
+        #game-over-handle { font-size: 2.125rem; }
+        #game-over-stats { padding: 5px 12px; gap: 2px; }
         #game-over-score { font-size: 0.875rem; }
         #high-score-table {
           padding: 6px 10px;
@@ -364,7 +399,11 @@
         #arcade-1up,
         #arcade-bar.leading #arcade-high-label,
         #arcade-bar.leading #arcade-high,
-        .score-row.current { animation: none; }
+        .score-row.current,
+        #radio.on:not(.playing) #radio-power,
+        #radio:not(.playing) #radio-time,
+        #radio.playing #radio-vis i::after,
+        #radio.on #radio-ticker.scrolling { animation: none; }
       }
       /* Narrow screens: give the arcade bar the top row to itself so it can't
          land on the HUD heading. */
@@ -372,6 +411,299 @@
         #arcade-bar { gap: 22px; }
         .arcade-value { font-size: 13px; }
         #hud { top: calc(max(14px, env(safe-area-inset-top)) + 38px); }
+      }
+      /* RFZAMP: a Winamp-2-style player drawn in CSS (no Nullsoft artwork), in
+         the HUD's monochrome matrix green. Off, it rolls up to the windowshade
+         bar; on, it opens the main window. */
+      #radio {
+        --wa-face: #07120a;
+        --wa-hi: #1f5a2a;
+        --wa-lo: #010402;
+        --wa-lcd: #000;
+        --wa-green: var(--matrix-green);
+        --wa-pale: #b7ffab;
+        --wa-dim-green: #0f3d12;
+        --wa-line: rgba(57, 255, 20, 0.45);
+        position: fixed;
+        top: max(10px, env(safe-area-inset-top));
+        right: max(16px, env(safe-area-inset-right));
+        width: 288px;
+        box-sizing: border-box;
+        border: 1px solid var(--wa-lo);
+        background: var(--wa-face);
+        box-shadow: inset 1px 1px 0 var(--wa-hi), inset -1px -1px 0 #030a05,
+          0 4px 14px rgba(0, 0, 0, 0.55), 0 0 12px rgba(57, 255, 20, 0.12);
+        color: var(--wa-green);
+        font-family: "VT323", ui-monospace, "SF Mono", Menlo, monospace;
+        user-select: none;
+      }
+      #radio:not(.on) { width: 200px; }
+      #radio-titlebar {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 18px;
+        padding: 0 4px 0 3px;
+        background: linear-gradient(#0f2614, #06120a);
+      }
+      .radio-grip {
+        flex: 1 1 auto;
+        min-width: 8px;
+        height: 7px;
+        background: repeating-linear-gradient(var(--wa-line) 0 1px, transparent 1px 3px);
+      }
+      #radio-title {
+        color: #d7ffd0;
+        font: 700 9px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+        letter-spacing: 2px;
+        text-decoration: none;
+      }
+      #radio-title:hover,
+      #radio-title:focus-visible { color: #efffec; }
+      #radio-status {
+        min-width: 5.5em;
+        color: #5f9a62;
+        font-size: 13px;
+        line-height: 1;
+        text-align: right;
+        letter-spacing: 1px;
+      }
+      #radio.on #radio-status { color: var(--wa-green); }
+      /* The power button is a lamp, the one deliberate break from the green:
+         blue, dim and raised while silent; red, glowing and pressed in while
+         the stream is actually playing. */
+      #radio-power {
+        flex: 0 0 auto;
+        width: 13px;
+        height: 13px;
+        padding: 0;
+        border: 1px solid rgba(120, 170, 255, 0.55);
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #6f9dff, #1d3f9e 70%);
+        opacity: 0.6;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+        cursor: pointer;
+        transition: opacity 160ms ease, box-shadow 160ms ease, transform 80ms ease;
+      }
+      #radio.on:not(.playing) #radio-power {
+        animation: radio-tuning 0.9s ease-in-out infinite alternate;
+      }
+      #radio.playing #radio-power {
+        border-color: #ff8a8a;
+        background: radial-gradient(circle at 35% 30%, #ff9a9a, #d8141a 70%);
+        opacity: 1;
+        transform: translateY(1px) scale(0.92);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45),
+          0 0 6px rgba(255, 40, 40, 0.9), 0 0 14px rgba(255, 40, 40, 0.5);
+      }
+      #radio-power:hover { opacity: 0.85; }
+      #radio.playing #radio-power:hover { opacity: 1; }
+      @keyframes radio-tuning {
+        from { opacity: 0.5; }
+        to { opacity: 0.95; }
+      }
+      #radio-main {
+        display: grid;
+        grid-template-columns: 94px 1fr;
+        grid-template-areas: "display info" "transport transport";
+        gap: 5px 6px;
+        padding: 5px 6px 6px;
+      }
+      #radio:not(.on) #radio-main { display: none; }
+      .radio-lcd {
+        background: var(--wa-lcd);
+        box-shadow: inset 1px 1px 0 var(--wa-lo), inset -1px -1px 0 var(--wa-hi);
+      }
+      #radio-display {
+        grid-area: display;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 3px 4px 4px;
+      }
+      #radio-clock {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 30px;
+        line-height: 0.8;
+        text-shadow: 0 0 4px rgba(57, 255, 20, 0.55);
+      }
+      #radio-play-state {
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 7px solid var(--wa-dim-green);
+      }
+      #radio.playing #radio-play-state { border-left-color: var(--wa-green); }
+      #radio:not(.playing) #radio-time { animation: radio-blink 1s steps(1, end) infinite; }
+      @keyframes radio-blink {
+        50% { opacity: 0.25; }
+      }
+      #radio-vis {
+        display: flex;
+        align-items: flex-end;
+        gap: 1px;
+        height: 20px;
+      }
+      /* Each bar is a full dark-to-bright green ramp under a black shutter, so a
+         bar's brightness follows its height the way Winamp's colour did. The stream can't be
+         analysed (no CORS on the Icecast host), so this is a dance, not a
+         real spectrum. */
+      #radio-vis i {
+        position: relative;
+        flex: 1;
+        height: 100%;
+        overflow: hidden;
+        background: linear-gradient(#efffec, var(--wa-green) 30%, #1fa80f 65%, #0c5a08);
+      }
+      #radio-vis i::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--wa-lcd);
+        transform-origin: top;
+        transform: scaleY(0.94);
+      }
+      #radio.playing #radio-vis i::after {
+        animation: radio-vis var(--t, 0.9s) steps(6, end) var(--d, 0s) infinite alternate;
+      }
+      @keyframes radio-vis {
+        0% { transform: scaleY(0.85); }
+        25% { transform: scaleY(0.3); }
+        50% { transform: scaleY(0.65); }
+        75% { transform: scaleY(0.12); }
+        100% { transform: scaleY(0.5); }
+      }
+      #radio-info {
+        grid-area: info;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      #radio-marquee {
+        height: 16px;
+        overflow: hidden;
+        padding: 0 3px;
+        font-size: 17px;
+        line-height: 16px;
+        white-space: pre;
+      }
+      #radio-ticker { display: inline-block; }
+      /* Winamp scrolled a character at a time, not smoothly, hence steps(). The
+         ticker holds the title twice, so sliding half its width loops seamlessly. */
+      #radio.on #radio-ticker.scrolling {
+        animation: radio-marquee var(--ticker-duration, 10s) steps(var(--ticker-steps, 40), end) infinite;
+      }
+      @keyframes radio-marquee {
+        to { transform: translateX(-50%); }
+      }
+      #radio-readouts {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 13px;
+        line-height: 1;
+        color: #7fc684;
+      }
+      .radio-box b {
+        display: inline-block;
+        min-width: 2.2em;
+        margin-right: 2px;
+        padding: 1px 2px 0;
+        background: var(--wa-lcd);
+        color: var(--wa-green);
+        font-weight: 400;
+        text-align: right;
+        box-shadow: inset 1px 1px 0 var(--wa-lo), inset -1px -1px 0 var(--wa-hi);
+      }
+      #radio-volume {
+        --radio-vol: 60%;
+        --radio-vol-colour: hsl(105 100% 42%);
+        width: 100%;
+        height: 9px;
+        margin: 1px 0 0;
+        appearance: none;
+        -webkit-appearance: none;
+        background: linear-gradient(to right,
+          var(--radio-vol-colour) var(--radio-vol), #031006 var(--radio-vol));
+        box-shadow: inset 1px 1px 0 var(--wa-lo), inset -1px -1px 0 var(--wa-hi);
+        cursor: pointer;
+      }
+      #radio.muted #radio-volume { filter: brightness(0.4); }
+      #radio-volume::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 11px;
+        border: 1px solid var(--wa-lo);
+        background: linear-gradient(var(--wa-pale), #2f7a33);
+        box-shadow: inset 1px 1px 0 #efffec;
+      }
+      #radio-volume::-moz-range-thumb {
+        width: 12px;
+        height: 9px;
+        border: 1px solid var(--wa-lo);
+        border-radius: 0;
+        background: linear-gradient(var(--wa-pale), #2f7a33);
+      }
+      #radio-transport {
+        grid-area: transport;
+        display: flex;
+        gap: 2px;
+      }
+      #radio-transport button,
+      #radio-transport a {
+        display: grid;
+        place-items: center;
+        min-width: 26px;
+        height: 18px;
+        padding: 0 5px;
+        box-sizing: border-box;
+        border: 1px solid var(--wa-lo);
+        background: linear-gradient(#16391b, #0a1f0e);
+        box-shadow: inset 1px 1px 0 #2f6a36;
+        color: var(--wa-pale);
+        font: 700 10px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      #radio-transport button:active,
+      #radio-transport button[aria-pressed="true"] {
+        background: linear-gradient(#020803, #0c2410);
+        box-shadow: inset 1px 1px 0 var(--wa-lo);
+      }
+      #radio.playing #radio-play { color: var(--wa-green); }
+      #radio.muted #radio-mute {
+        color: var(--wa-green);
+        text-shadow: 0 0 5px rgba(57, 255, 20, 0.8);
+      }
+      #radio-eject { margin-left: auto; }
+      #radio button:focus-visible,
+      #radio a:focus-visible,
+      #radio-volume:focus-visible {
+        outline: 2px solid var(--matrix-green);
+        outline-offset: 1px;
+      }
+      /* Below desktop the arcade bar owns the top row, so the player sits at the
+         bottom centre, between the joystick and the action buttons... */
+      @media (max-width: 900px) {
+        #radio {
+          top: auto;
+          right: auto;
+          left: 50%;
+          bottom: max(10px, env(safe-area-inset-bottom));
+          transform: translateX(-50%);
+        }
+      }
+      /* ...and on a portrait phone there is no room between them, so it rides
+         just above the thumb controls instead. */
+      @media (max-width: 520px) {
+        #radio {
+          bottom: calc(max(24px, env(safe-area-inset-bottom)) + 176px);
+          max-width: calc(100vw - 32px);
+        }
       }
       #handle-gate {
         position: fixed;
@@ -591,24 +923,59 @@
     </div>
     <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
       <h1 id="game-over-title">GAME OVER</h1>
-      <div id="game-over-handle">HANDLE // UNSET</div>
-      <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
-      <div id="game-over-session">SESSION 0:00</div>
+      <div id="game-over-handle">UNSET</div>
+      <div id="game-over-stats">
+        <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
+        <div id="game-over-session">SESSION 0:00</div>
+      </div>
       <div id="game-over-record" hidden>NEW HIGH SCORE</div>
       <div id="game-over-best">HIGH SCORES</div>
       <ol id="high-score-table" aria-label="High scores"></ol>
       <div id="game-over-hint">PRESS R OR TAP HIT TO RETRY</div>
     </section>
+    <div id="radio" role="group" aria-label="Radio Free Zion player">
+      <div id="radio-titlebar">
+        <button id="radio-power" type="button" aria-pressed="false" aria-label="Radio power" title="Turn radio on"></button>
+        <span class="radio-grip" aria-hidden="true"></span>
+        <a id="radio-title" href="https://radiofreezion.net/" target="_blank" rel="noopener noreferrer" title="Radio Free Zion">RFZAMP</a>
+        <span class="radio-grip" aria-hidden="true"></span>
+        <span id="radio-status" aria-live="polite">OFF</span>
+      </div>
+      <div id="radio-main">
+        <div id="radio-display" class="radio-lcd">
+          <div id="radio-clock">
+            <span id="radio-play-state" aria-hidden="true"></span>
+            <span id="radio-time" aria-label="Listening time">00:00</span>
+          </div>
+          <div id="radio-vis" aria-hidden="true"><i style="--t:0.62s;--d:-0.1s"></i><i style="--t:0.9s;--d:-0.4s"></i><i style="--t:0.74s;--d:-0.2s"></i><i style="--t:1.1s;--d:-0.7s"></i><i style="--t:0.68s;--d:-0.3s"></i><i style="--t:0.95s;--d:-0.5s"></i><i style="--t:0.8s;--d:-0.1s"></i><i style="--t:1.2s;--d:-0.9s"></i><i style="--t:0.7s;--d:-0.6s"></i><i style="--t:0.88s;--d:-0.2s"></i><i style="--t:1.05s;--d:-0.4s"></i><i style="--t:0.66s;--d:-0.8s"></i><i style="--t:0.92s;--d:-0.3s"></i><i style="--t:0.78s;--d:-0.5s"></i><i style="--t:1.15s;--d:-0.1s"></i><i style="--t:0.7s;--d:-0.7s"></i></div>
+        </div>
+        <div id="radio-info">
+          <div id="radio-marquee" class="radio-lcd"><span id="radio-ticker">RADIO FREE ZION</span></div>
+          <div id="radio-readouts">
+            <span class="radio-box"><b id="radio-kbps">--</b>kbps</span>
+            <span class="radio-box"><b id="radio-listeners">--</b>lsn</span>
+          </div>
+          <input id="radio-volume" type="range" min="0" max="100" step="1" value="60" aria-label="Radio volume" />
+        </div>
+        <div id="radio-transport">
+          <button id="radio-play" type="button" aria-label="Play">&#9654;</button>
+          <button id="radio-stop" type="button" aria-label="Stop">&#9632;</button>
+          <button id="radio-mute" type="button" aria-pressed="false" aria-label="Mute radio (M)">MUTE</button>
+          <a id="radio-eject" href="https://radiofreezion.net/" target="_blank" rel="noopener noreferrer" aria-label="Open the Radio Free Zion website" title="radiofreezion.net">&#9167;</a>
+        </div>
+      </div>
+    </div>
     <div id="hud">
       <div id="hud-heading">
         <span><b>AGENT SYNDICATE</b> // <span id="app-version">prototype</span></span>
-        <button id="instructions-toggle" type="button" aria-controls="control-instructions">KEYS</button>
+        <button id="instructions-toggle" class="hud-button" type="button" aria-controls="control-instructions">KEYS</button>
+        <button id="instructions-minimize" class="hud-button" type="button" aria-controls="control-instructions">HIDE</button>
       </div>
       <div id="control-instructions" aria-live="polite">
       <span class="desktop-help">
         Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
         Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; E — lift car<br />
-        J while carrying — throw &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; Esc — release mouse
+        J while carrying — throw &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; M — mute radio &nbsp;·&nbsp; Esc — release mouse
       </span>
       <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera &nbsp;·&nbsp; LIFT — grab / throw the car</span>
       </div>

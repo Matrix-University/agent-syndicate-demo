@@ -125,6 +125,10 @@ export class Input {
   get restartPressed() {
     return this.wasPressed('KeyR');
   }
+
+  get radioMutePressed() {
+    return this.wasPressed('KeyM');
+  }
 }
 
 function clampAxis(value) {

@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-09-24
+
+### Changed
+
+- The HUD control instructions now wrap in a compact left-side column instead of
+  stretching across the playfield, and players can hide or show them with a
+  choice remembered in a device cookie.
+
 ## [0.4.1] - 2026-09-24
 
 ### Added
