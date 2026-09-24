@@ -49,10 +49,19 @@ export default defineConfig({
   // would call /api/* on a static deploy that has no server to answer.
   define: { __EMAIL_GATE_LEVEL__: JSON.stringify(gateLevel) },
   build: {
+    // three alone is ~650 kB minified and the game code is ~11 kB of the bundle,
+    // so nothing here gets under Rollup's 500 kB default. Splitting the engine
+    // out is still worth it: it changes only on upgrade, so editing game code
+    // no longer invalidates the whole download. The limit is raised to match
+    // reality rather than warning on every build.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       input: {
         main: 'index.html',
         ...(gateLevel === GATE_OFF ? {} : { admin: 'admin.html' }),
+      },
+      output: {
+        manualChunks: (id) => (id.includes('node_modules/three') ? 'three' : undefined),
       },
     },
   },
