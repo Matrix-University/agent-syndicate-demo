@@ -146,11 +146,10 @@
         color: var(--matrix-green);
         animation: arcade-blink 0.5s steps(1, end) infinite;
       }
-      #run-stats {
+      #player-handle {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-top: 6px;
       }
       #run-handle {
         color: var(--matrix-green);
@@ -591,7 +590,7 @@
       </div>
     </div>
     <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
-      <h1 id="game-over-title">AGENT DOWN</h1>
+      <h1 id="game-over-title">GAME OVER</h1>
       <div id="game-over-handle">HANDLE // UNSET</div>
       <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
       <div id="game-over-session">SESSION 0:00</div>
@@ -615,17 +614,20 @@
       </div>
       <div id="combat-hud">
         <div class="hud-meter-label">
-          <span>AGENT RAYMENT</span>
-          <span id="player-health-value">25 / 25</span>
+          <span id="player-handle">
+            <span id="run-handle">UNSET</span>
+            <button id="handle-edit" type="button" aria-label="Change your handle">EDIT</button>
+          </span>
+          <span id="player-health-value">9 / 9</span>
         </div>
         <div
           id="player-health-meter"
           class="hud-meter"
           role="progressbar"
-          aria-label="Agent Rayment health"
+          aria-label="Player health"
           aria-valuemin="0"
-          aria-valuemax="25"
-          aria-valuenow="25"
+          aria-valuemax="9"
+          aria-valuenow="9"
         >
           <span id="player-health-fill" class="hud-meter-fill"></span>
         </div>
@@ -645,10 +647,6 @@
           <span id="enemy-health-fill" class="hud-meter-fill"></span>
         </div>
         <div id="objective">OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)</div>
-        <div id="run-stats">
-          <span id="run-handle">HANDLE // UNSET</span>
-          <button id="handle-edit" type="button" aria-label="Change your handle">EDIT</button>
-        </div>
         <div id="lift-prompt" role="status" aria-live="polite" hidden></div>
       </div>
     </div>

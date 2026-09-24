@@ -4,6 +4,11 @@
 const HANDLE_KEY = 'agent-syndicate:handle';
 const SCORES_KEY = 'agent-syndicate:high-scores';
 const BEST_KEY = 'agent-syndicate:best-run'; // pre-table single record, migrated on load
+// The handle is also mirrored into a year-long cookie: some browsers and
+// embedded webviews drop localStorage between sessions, and a handle is set
+// once and rarely changed, so it shouldn't be asked for again when that happens.
+const HANDLE_COOKIE = 'agent_syndicate_handle';
+const HANDLE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export const HANDLE_MAX_LENGTH = 14;
 export const HANDLE_MIN_LENGTH = 2;
@@ -80,6 +85,23 @@ function writeStored(key, value) {
   }
 }
 
+function readCookie(name) {
+  try {
+    const pair = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
+    return pair ? decodeURIComponent(pair.slice(name.length + 1)) : null;
+  } catch {
+    return null; // no document (server import) or cookies blocked
+  }
+}
+
+function writeCookie(name, value, maxAge) {
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; max-age=${maxAge}; path=/; SameSite=Lax`;
+  } catch {
+    // Non-fatal, same as writeStored.
+  }
+}
+
 function toEntry(raw) {
   if (!Number.isFinite(raw?.kills) || !Number.isFinite(raw?.seconds)) return null;
   return {
@@ -112,7 +134,9 @@ function readScores() {
 
 export class PlayerProfile {
   constructor() {
-    this.handle = sanitizeHandle(readStored(HANDLE_KEY));
+    this.handle = sanitizeHandle(readStored(HANDLE_KEY) || readCookie(HANDLE_COOKIE));
+    // Re-save so whichever store lost it gets it back, and the cookie's year restarts.
+    if (this.handle) this._saveHandle();
     this.scores = readScores();
   }
 
@@ -123,7 +147,7 @@ export class PlayerProfile {
 
   setHandle(raw) {
     this.handle = sanitizeHandle(raw);
-    writeStored(HANDLE_KEY, this.handle);
+    this._saveHandle();
     return this.handle;
   }
 
@@ -151,6 +175,11 @@ export class PlayerProfile {
   nameEntry(entry, rawHandle) {
     entry.handle = this.setHandle(rawHandle);
     this._saveScores();
+  }
+
+  _saveHandle() {
+    writeStored(HANDLE_KEY, this.handle);
+    writeCookie(HANDLE_COOKIE, this.handle, HANDLE_COOKIE_MAX_AGE);
   }
 
   _saveScores() {

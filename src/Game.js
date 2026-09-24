@@ -18,7 +18,8 @@ const PLAYER_SPAWN = new THREE.Vector3(-27.5, 0, 51);
 const PLAYER_SPAWN_YAW = Math.PI;
 const ENEMY_SPAWN_CENTER = new THREE.Vector3(PLAYER_SPAWN.x, 0, PLAYER_SPAWN.z - 10);
 const ENEMY_COUNT = 5;
-const PLAYER_HEALTH_PER_ENEMY = 5;
+const PLAYER_MAX_HEALTH = 9;
+const CAR_OBJECTIVE_UNLOCK_KILLS = 3;
 const DEATH_FLASH_IN = 0.3;
 const DEATH_REVEAL_DELAY = 0.9;
 const DEATH_FLASH_OUT = 0.7;
@@ -48,7 +49,7 @@ export class Game {
       modelUrl: '/models/agent-dcl.glb',
       modelScale: 1.7,
       modelYaw: 0,
-      maxHealth: ENEMY_COUNT * PLAYER_HEALTH_PER_ENEMY,
+      maxHealth: PLAYER_MAX_HEALTH,
     });
     this.player.root.position.copy(PLAYER_SPAWN);
     this.player.root.rotation.y = PLAYER_SPAWN_YAW;
@@ -242,9 +243,9 @@ export class Game {
       `${this.enemyManager.aliveCount} ACTIVE / ${this.enemyManager.defeated} DOWN`;
     this.enemyHealthMeter.setAttribute('aria-valuenow', String(health));
     this.enemyHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
-    this.objective.textContent =
-      `OBJECTIVE // SURVIVE CROWD (${this.enemyManager.aliveCount} ACTIVE, ` +
-      `${this.enemyManager.maxAttackers} ATTACK SLOTS)`;
+    this.objective.textContent = this.enemyManager.defeated >= CAR_OBJECTIVE_UNLOCK_KILLS
+      ? 'OBJECTIVE // THROW CAR TO DESTROY AGENTS AND ESCAPE THE GARAGE'
+      : 'OBJECTIVE // DEFEND YOURSELF';
   }
 
   _updatePlayerHud() {
@@ -256,7 +257,9 @@ export class Game {
   }
 
   _updateHandleHud() {
-    this.runHandle.textContent = `HANDLE // ${this.profile.handle || 'UNSET'}`;
+    const handle = this.profile.handle || 'UNSET';
+    this.runHandle.textContent = handle;
+    this.playerHealthMeter.setAttribute('aria-label', `${handle} health`);
   }
 
   // The cabinet readout: this run beside the score to beat. Rewrites only when

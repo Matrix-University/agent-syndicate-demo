@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-24
+
+### Added
+
+- Player handles are mirrored into a one-year cookie, so returning players are
+  not prompted again when local storage is cleared or unavailable.
+- The objective now starts with `DEFEND YOURSELF` and changes to `THROW CAR TO
+DESTROY AGENTS AND ESCAPE THE GARAGE` after three agents are defeated.
+
+### Changed
+
+- The HUD now shows the current player's handle beside the health meter and its
+  EDIT button, removing the duplicate handle row and freeing screen space.
+- Agent health is reduced from 25 to 9.
+- The defeat screen title now reads `GAME OVER`.
+
 ## [0.4.0] - 2026-09-24
 
 ### Added

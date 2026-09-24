@@ -231,7 +231,8 @@ need no extra button; jump and punch are unavailable until the car is gone.
 ## Handle, session and the high score board
 
 `PlayerProfile` (`src/PlayerProfile.js`) owns the two things that outlive a run —
-the player's handle and the `HIGH_SCORE_SLOTS`-row board — both in `localStorage`,
+the player's handle and the `HIGH_SCORE_SLOTS`-row board — both in `localStorage`
+(the handle mirrored into a year-long cookie, so a cleared store doesn't re-prompt),
 because the gate defaults to level 0 and a static deploy has no API to persist them
 to. `Game` owns the session clock (`sessionTime`, one life: spawn to death, reset by
 `_restart`) and writes every readout; `HandleDialog` only reads and writes the
