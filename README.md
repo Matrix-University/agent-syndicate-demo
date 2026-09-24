@@ -205,8 +205,11 @@ bundle, the server enforces it at runtime, and they are meant to agree. Putting
 `EMAIL_GATE_LEVEL` in `.env` covers both.
 
 `npm run dev` and `npm start` both handle `/api/subscribe/start`,
-`/api/subscribe/verify`, and `/api/session` (via shared handlers in `server/`),
-so the gate works locally as soon as `.env` is set up. Without SMTP, run level 1
+`/api/subscribe/verify`, `/api/session`, and `/api/scores` (via shared handlers
+in `server/`), so the gate and the shared leaderboard work locally as soon as
+`.env` is set up. The leaderboard needs no configuration at all: with
+`DATABASE_URL` unset it writes `data/scores.jsonl`, and with no server reachable
+the game falls back to its own `localStorage` board. Without SMTP, run level 1
 or use the documented `SMTP_CONSOLE_FALLBACK=true` development option; do not
 run level 2 in production until real delivery is working.
 

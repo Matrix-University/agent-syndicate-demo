@@ -39,6 +39,18 @@ const SCHEMA = [
      key text primary key,
      value jsonb not null
    )`,
+  // The shared high score board. Rows are only written when a run makes the
+  // board, so this stays small without a prune job.
+  `create table if not exists high_scores (
+     id bigserial primary key,
+     handle text not null default '',
+     kills integer not null,
+     seconds real not null,
+     email text,
+     recorded_at timestamptz not null default now()
+   )`,
+  `create index if not exists high_scores_rank
+     on high_scores (kills desc, seconds asc, recorded_at asc)`,
   // Level 2's pending codes. In-process state would be wrong here: each request
   // can land on a different instance, so the one checking the code is not the
   // one that sent it. TTL, cooldown and attempt count all live in the row.

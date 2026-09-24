@@ -1,5 +1,9 @@
 # Collected email addresses (PII) — never commit real signups.
 emails.jsonl
 
+# Shared high score board — rows carry the submitting session's email when the
+# gate is on, so this is PII too.
+scores.jsonl
+
 # Runtime admin settings (e.g. email gate on/off) — regenerated with defaults if missing.
 settings.json

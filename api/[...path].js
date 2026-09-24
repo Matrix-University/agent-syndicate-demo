@@ -11,6 +11,7 @@ import {
   handleCompleteVerificationRequest,
   handleSessionCheckRequest,
 } from '../server/requestHandler.mjs';
+import { handleScoresRequest } from '../server/scoreHandlers.mjs';
 import {
   handleAdminLoginRequest,
   handleAdminLogoutRequest,
@@ -26,6 +27,7 @@ const ROUTES = {
   '/api/subscribe/verify': handleCompleteVerificationRequest,
   '/api/session': handleSessionCheckRequest,
   '/api/gate-status': handleGateStatusRequest,
+  '/api/scores': handleScoresRequest,
   '/api/admin/login': handleAdminLoginRequest,
   '/api/admin/logout': handleAdminLogoutRequest,
   '/api/admin/me': handleAdminMeRequest,

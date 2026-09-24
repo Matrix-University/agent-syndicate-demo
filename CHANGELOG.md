@@ -4,6 +4,66 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-24
+
+### Added
+
+- Player handles. A first-time player is asked for one before their first run —
+  LEETIFY rewrites what they type in leetspeak, and leaving the field blank takes
+  the suggested handle. The HUD shows it beside an EDIT button that reopens the
+  prompt, and the run freezes while the prompt is open, so typing a handle never
+  drives the player.
+- A live session readout while you play: the arcade bar's 1UP column counts
+  agents down and session length, where a session is one life, timed from spawn
+  to the moment the player goes down.
+- An arcade high score board, in the Pac-Man/Galaga idiom: a top-9 table kept
+  between sessions, a 1UP / HIGH SCORE readout across the top of the screen, and
+  a rank on the way out. The HIGH SCORE column switches to your run and blinks
+  the moment it passes the board's top row.
+- The game-over panel now reports the finished session — handle, agents
+  neutralized, session length — then `NEW HIGH SCORE` or `RANKED 3RD` above the
+  board, with the row you just took blinking. Placing without a handle opens
+  `YOU MADE THE BOARD` to name the row (or take `ANON`), the way a cabinet asks
+  for initials.
+- Board order is most agents killed, shortest session breaking a tie. A run
+  without a kill never places, and a tie keeps the incumbent — you have to beat a
+  row, not match it.
+- A **shared** high score board at `/api/scores`, stored the same way the email
+  list is: the Postgres `high_scores` table when `DATABASE_URL` is set,
+  `data/scores.jsonl` when it is not, and mounted in all three route tables
+  (`vite.config.js`, `server/index.mjs`, `api/[...path].js`). Runs are only
+  written when they make the board, so the table stays small with no prune job.
+- The two boards work together: the game shows the shared board whenever the API
+  answers and its own `localStorage` board whenever it doesn't — offline, on a
+  static deploy, or with storage blocked — and labels the panel `GLOBAL` or
+  `LOCAL` so it is always clear which one you are looking at. A run is recorded
+  locally either way, and a best run stored by an earlier build is migrated into
+  the local board on load.
+- The board's blinking follows `prefers-reduced-motion`, and the game-over panel
+  compacts itself on short screens so nine rows still fit on a landscape phone.
+
+### Changed
+
+- The HUD heading now reads its version from `package.json` (inlined by
+  `vite.config.js` as `__APP_VERSION__`) instead of the hardcoded
+  `prototype 0.1`, so it can't drift from the released version again.
+- `README.md`, `CLAUDE.md` and [docs/vercel-deployment.md](docs/vercel-deployment.md)
+  now cover the leaderboard: the new route, which storage backend answers it, and
+  the rule that `BOARD_SIZE` in `server/scoreStore.mjs` must match
+  `HIGH_SCORE_SLOTS` in `src/PlayerProfile.js`.
+
+### Security
+
+- A score row records the submitting session's email when the email gate is on,
+  so `data/scores.jsonl` is now gitignored alongside `data/emails.jsonl`, and
+  `listScores` projects the address away on both backends — the public board
+  never returns it.
+- Submitted runs are validated server-side (kill count, duration, and a floor on
+  seconds per kill) and handles are sanitized with the same rules the client
+  uses. These are sanity bounds, not anti-cheat: the browser reports its own
+  kills and time, so a crafted request can still put anything on the board.
+  Treat it as bragging rights, not a record of play.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added

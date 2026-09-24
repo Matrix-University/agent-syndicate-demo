@@ -37,6 +37,8 @@ src/LiftableCar.js       the one car the player can lift and throw
 src/Player.js            character: rig, movement, animation state machine
 src/ThirdPersonCamera.js smooth follow camera
 src/Input.js             keyboard state + movement axes
+src/PlayerProfile.js     handle + personal best, in localStorage
+src/HandleDialog.js      the "choose your handle" overlay
 ```
 
 **Load-bearing design choice — do not break it:** `Player.root` is what moves
@@ -226,6 +228,44 @@ Ownership is deliberately split, so keep it that way:
 While carrying, the attack input **throws** instead of punching, so touch controls
 need no extra button; jump and punch are unavailable until the car is gone.
 
+## Handle, session and the high score board
+
+`PlayerProfile` (`src/PlayerProfile.js`) owns the two things that outlive a run —
+the player's handle and the `HIGH_SCORE_SLOTS`-row board — both in `localStorage`,
+because the gate defaults to level 0 and a static deploy has no API to persist them
+to. `Game` owns the session clock (`sessionTime`, one life: spawn to death, reset by
+`_restart`) and writes every readout; `HandleDialog` only reads and writes the
+profile.
+
+**Two boards, one shape.** `PlayerProfile` is the local one; `RemoteScores`
+(`src/RemoteScores.js`) is the shared one behind `/api/scores`. The remote board
+is used whenever it answers and the local one whenever it does not — a static
+deploy with no API still has a working leaderboard, just a private one. `Game`
+picks per render (`_boardBest`, and the `global` flag `_renderBoard` labels the
+panel with), so the heading always matches the rows on screen. Both boards are
+always written: the local one at `_endGame`, the shared one from
+`_submitSession` once any name prompt has resolved.
+
+Board order is **most agents killed, shortest session breaking a tie**
+(`compareRuns`; `outranks` is the same test for a live run). Two rules make it
+behave like a cabinet: a run with no kills never places, or dying instantly would
+post an unbeatable 0-in-0:00; and a tie keeps the incumbent, so you have to beat a
+row rather than match it. `recordRun` returns `{ rank, entry }` — `Game._endGame`
+files the run, sets the rank banner and renders the board with that row flagged
+`current`.
+
+The arcade bar (`#arcade-bar`) is the 1UP/HIGH SCORE readout: `_updateRunHud`
+writes it only when the displayed second or kill count changes, and swaps the
+HIGH SCORE column to the live run (plus a `leading` blink) once it outranks the
+top row. A run that places while the player has no handle sets `_pendingEntry`,
+and the name prompt opens from `_updateDeathFade` once the panel is actually on
+screen — not from `_endGame`, which would freeze the loop before the reveal ran.
+
+The prompt freezes the run rather than pausing around it: `_loop` returns after
+rendering while `handleDialog.isOpen`, and `promptForHandle` wraps it in
+`input.setSuspended(true)` so typing a handle neither drives the player nor leaves
+the keys held when it opened stuck down.
+
 ## Input
 
 Keyboard state is a `Set` of `e.code` in `Input`, surfaced as axis getters
@@ -234,6 +274,29 @@ Keyboard state is a `Set` of `e.code` in `Input`, surfaced as axis getters
 `Player.update`. Keys clear on window `blur` to avoid stuck movement — keep it.
 Touch action buttons are a data list in `MobileControls` (`this._actions`) — add a
 button there, not another branch.
+
+## Shared leaderboard
+
+`/api/scores` (`server/scoreHandlers.mjs`) is GET the board, POST a finished run.
+It is mounted in the same three places as everything else — `vite.config.js`,
+`server/index.mjs`, `api/[...path].js` — and storage follows the gate's pattern
+exactly: `server/scoreStore.mjs` uses the Postgres `high_scores` table when
+`DATABASE_URL` is set and `data/scores.jsonl` when it is not, so `npm run dev`
+needs no database.
+
+`addScore` writes **only when the run makes the board**, which is what keeps the
+table small with no prune job. `BOARD_SIZE` there mirrors `HIGH_SCORE_SLOTS` in
+`src/PlayerProfile.js` — keep them equal, or a run places on one board and not the
+other. The handler imports `sanitizeHandle` from `src/PlayerProfile.js` so a
+handle means the same thing on both ends; keep that module's top level free of
+browser globals.
+
+**The board is public and the client is trusted.** Rows carry the session email
+when the gate is on, so `listScores` projects it away on both backends — never
+return a stored row directly. And since the browser reports its own kills and
+time, `validate()` is sanity bounds (kill count, duration, a floor on seconds per
+kill), not anti-cheat: a crafted POST can still put anything up there. Making it
+authoritative would mean simulating the fight server-side.
 
 ## Email gate & mail server
 

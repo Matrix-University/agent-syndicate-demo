@@ -86,6 +86,94 @@
         margin-top: 5px;
         color: var(--matrix-green);
       }
+      #arcade-bar {
+        position: fixed;
+        top: max(10px, env(safe-area-inset-top));
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 34px;
+        padding: 5px 16px 6px;
+        border-radius: 4px;
+        background: rgba(4, 8, 6, 0.55);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        color: var(--matrix-green);
+        text-align: center;
+        text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+        pointer-events: none;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .arcade-col { display: flex; flex-direction: column; gap: 2px; }
+      .arcade-label { font-size: 10px; letter-spacing: 3px; }
+      .arcade-value { font-size: 15px; letter-spacing: 1px; color: #efffec; }
+      /* Classic cabinet tell: the player marker blinks, and the HIGH SCORE
+         column lights up while the current run is sitting on top of the board. */
+      #arcade-1up { animation: arcade-blink 1s steps(1, end) infinite; }
+      #arcade-bar.leading #arcade-high-label,
+      #arcade-bar.leading #arcade-high {
+        color: var(--matrix-green);
+        animation: arcade-blink 0.5s steps(1, end) infinite;
+      }
+      @keyframes arcade-blink {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0.2; }
+      }
+      #high-score-table {
+        margin: 0;
+        padding: 8px 14px;
+        box-sizing: border-box;
+        width: min(370px, 100%);
+        border: 1px solid rgba(183, 255, 171, 0.4);
+        border-radius: 4px;
+        background: rgba(4, 8, 6, 0.78);
+        list-style: none;
+        font-size: 0.8125rem;
+        line-height: 1.7;
+        letter-spacing: 1px;
+      }
+      .score-row {
+        display: grid;
+        grid-template-columns: 3.2em 1fr 7.2em 3.2em;
+        gap: 6px;
+        color: #d7ffd0;
+        text-align: left;
+      }
+      .score-row .score-kills,
+      .score-row .score-time { text-align: right; }
+      .score-row.empty { opacity: 0.4; }
+      .score-row.current {
+        color: var(--matrix-green);
+        animation: arcade-blink 0.5s steps(1, end) infinite;
+      }
+      #run-stats {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      #run-handle {
+        color: var(--matrix-green);
+        letter-spacing: 1px;
+      }
+      #handle-edit {
+        flex: 0 0 auto;
+        height: 20px;
+        padding: 0 7px;
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        border-radius: 3px;
+        background: rgba(8, 16, 12, 0.78);
+        color: #d7ffd0;
+        font: 700 9px/1 ui-monospace, "SF Mono", Menlo, monospace;
+        pointer-events: auto;
+        cursor: pointer;
+      }
+      #handle-edit:hover,
+      #handle-edit:focus-visible {
+        border-color: var(--matrix-green);
+        outline: 2px solid rgba(57, 255, 20, 0.45);
+        outline-offset: 1px;
+      }
       #lift-prompt {
         margin-top: 6px;
         padding: 3px 8px;
@@ -134,7 +222,24 @@
         line-height: 1;
         letter-spacing: 0;
       }
+      #game-over-handle {
+        font-size: 0.9375rem;
+        letter-spacing: 2px;
+      }
       #game-over-score { font-size: 1rem; }
+      #game-over-session { color: #d7ffd0; font-size: 0.875rem; }
+      #game-over-best {
+        margin-top: 4px;
+        font-size: 0.75rem;
+        letter-spacing: 4px;
+      }
+      #game-over-record {
+        padding: 2px 10px;
+        border: 1px solid var(--matrix-green);
+        font-size: 0.8125rem;
+        letter-spacing: 3px;
+      }
+      #game-over-record[hidden] { display: none; }
       #game-over-hint { color: #d7ffd0; font-size: 0.8125rem; opacity: 0.85; }
       .touch-help { display: none; }
       #mobile-controls {
@@ -242,8 +347,60 @@
       @media (max-width: 420px) {
         #game-over-title { font-size: 2rem; }
       }
+      /* Nine rows plus the session summary is tall — compact it rather than let
+         the board run off a landscape phone. */
+      @media (max-height: 560px) {
+        #game-over { gap: 6px; }
+        #game-over-title { font-size: 1.75rem; }
+        #game-over-handle { font-size: 0.8125rem; }
+        #game-over-score { font-size: 0.875rem; }
+        #high-score-table {
+          padding: 6px 10px;
+          font-size: 0.6875rem;
+          line-height: 1.45;
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         .hud-meter-fill { transition: none; }
+        #arcade-1up,
+        #arcade-bar.leading #arcade-high-label,
+        #arcade-bar.leading #arcade-high,
+        .score-row.current { animation: none; }
+      }
+      /* Narrow screens: give the arcade bar the top row to itself so it can't
+         land on the HUD heading. */
+      @media (max-width: 700px) {
+        #arcade-bar { gap: 22px; }
+        .arcade-value { font-size: 13px; }
+        #hud { top: calc(max(14px, env(safe-area-inset-top)) + 38px); }
+      }
+      #handle-gate {
+        position: fixed;
+        inset: 0;
+        z-index: 11;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: rgba(4, 8, 6, 0.94);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      #handle-gate[hidden] { display: none; }
+      #handle-gate-input {
+        letter-spacing: 3px;
+        text-transform: uppercase;
+      }
+      #handle-gate-actions { display: flex; gap: 8px; }
+      #handle-gate-actions button { flex: 1; }
+      #handle-gate-actions #handle-gate-leet {
+        border: 1px solid rgba(183, 255, 171, 0.55);
+        background: rgba(8, 16, 12, 0.85);
+      }
+      #handle-gate-actions #handle-gate-skip {
+        border: 1px solid rgba(183, 255, 171, 0.35);
+        background: transparent;
+        color: #9fe6a0;
       }
       #email-gate {
         position: fixed;
@@ -258,7 +415,8 @@
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
       }
       #email-gate[hidden] { display: none; }
-      #email-gate-panel {
+      #email-gate-panel,
+      #handle-gate-panel {
         width: min(380px, 100%);
         padding: 24px;
         box-sizing: border-box;
@@ -268,22 +426,27 @@
         color: #d7ffd0;
         box-shadow: 0 0 24px rgba(57, 255, 20, 0.18);
       }
-      #email-gate-title {
+      #email-gate-title,
+      #handle-gate-title {
         margin: 0 0 8px;
         color: var(--matrix-green);
         font-size: 1.1rem;
         letter-spacing: 2px;
         text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
       }
-      #email-gate-copy {
+      #email-gate-copy,
+      #handle-gate-copy {
         margin: 0 0 18px;
         font-size: 12.5px;
         line-height: 1.5;
         opacity: 0.9;
       }
-      #email-gate-form { display: flex; flex-direction: column; gap: 10px; }
-      #email-gate-label { font-size: 11px; letter-spacing: 1px; }
-      #email-gate-input {
+      #email-gate-form,
+      #handle-gate-form { display: flex; flex-direction: column; gap: 10px; }
+      #email-gate-label,
+      #handle-gate-label { font-size: 11px; letter-spacing: 1px; }
+      #email-gate-input,
+      #handle-gate-input {
         width: 100%;
         box-sizing: border-box;
         padding: 10px 12px;
@@ -294,11 +457,13 @@
         font: inherit;
         font-size: 13px;
       }
-      #email-gate-input:focus-visible {
+      #email-gate-input:focus-visible,
+      #handle-gate-input:focus-visible {
         outline: 2px solid var(--matrix-green);
         outline-offset: 1px;
       }
-      #email-gate-submit {
+      #email-gate-submit,
+      #handle-gate-actions button {
         padding: 10px 12px;
         border: 1px solid var(--matrix-green);
         border-radius: 4px;
@@ -309,11 +474,14 @@
         cursor: pointer;
       }
       #email-gate-submit:hover,
-      #email-gate-submit:focus-visible {
+      #email-gate-submit:focus-visible,
+      #handle-gate-actions button:hover,
+      #handle-gate-actions button:focus-visible {
         box-shadow: 0 0 14px rgba(57, 255, 20, 0.5);
       }
       #email-gate-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-      #email-gate-error {
+      #email-gate-error,
+      #handle-gate-error {
         min-height: 1.2em;
         color: #ff6b6b;
         font-size: 11.5px;
@@ -344,6 +512,34 @@
   </head>
   <body>
     <canvas id="app"></canvas>
+    <div id="handle-gate" role="dialog" aria-modal="true" aria-labelledby="handle-gate-title" hidden>
+      <div id="handle-gate-panel">
+        <h1 id="handle-gate-title">CHOOSE YOUR HANDLE</h1>
+        <p id="handle-gate-copy">
+          Pick the name the grid will know you by. Letters, digits and
+          <span aria-hidden="true">_ - . [ ] | ^ &lt; &gt;</span> only — hit LEETIFY
+          to translate it, or leave it blank to take the suggestion.
+        </p>
+        <form id="handle-gate-form" novalidate>
+          <label id="handle-gate-label" for="handle-gate-input">Handle</label>
+          <input
+            id="handle-gate-input"
+            type="text"
+            name="handle"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            maxlength="14"
+          />
+          <div id="handle-gate-error" role="alert" aria-live="assertive"></div>
+          <div id="handle-gate-actions">
+            <button id="handle-gate-submit" type="submit">SAVE</button>
+            <button id="handle-gate-leet" type="button">LEETIFY</button>
+            <button id="handle-gate-skip" type="button">SKIP</button>
+          </div>
+        </form>
+      </div>
+    </div>
     <div id="email-gate" role="dialog" aria-modal="true" aria-labelledby="email-gate-title" hidden>
       <div id="email-gate-panel">
         <h1 id="email-gate-title">JOIN THE SYNDICATE</h1>
@@ -384,14 +580,29 @@
       </div>
     </div>
     <div id="damage-flash" aria-hidden="true"></div>
+    <div id="arcade-bar">
+      <div class="arcade-col">
+        <span id="arcade-1up" class="arcade-label">1UP</span>
+        <span id="arcade-run" class="arcade-value">0 · 0:00</span>
+      </div>
+      <div class="arcade-col">
+        <span id="arcade-high-label" class="arcade-label">HIGH SCORE</span>
+        <span id="arcade-high" class="arcade-value">-- · --</span>
+      </div>
+    </div>
     <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
       <h1 id="game-over-title">AGENT DOWN</h1>
+      <div id="game-over-handle">HANDLE // UNSET</div>
       <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
+      <div id="game-over-session">SESSION 0:00</div>
+      <div id="game-over-record" hidden>NEW HIGH SCORE</div>
+      <div id="game-over-best">HIGH SCORES</div>
+      <ol id="high-score-table" aria-label="High scores"></ol>
       <div id="game-over-hint">PRESS R OR TAP HIT TO RETRY</div>
     </section>
     <div id="hud">
       <div id="hud-heading">
-        <span><b>AGENT SYNDICATE</b> // prototype 0.1</span>
+        <span><b>AGENT SYNDICATE</b> // <span id="app-version">prototype</span></span>
         <button id="instructions-toggle" type="button" aria-controls="control-instructions">KEYS</button>
       </div>
       <div id="control-instructions" aria-live="polite">
@@ -434,6 +645,10 @@
           <span id="enemy-health-fill" class="hud-meter-fill"></span>
         </div>
         <div id="objective">OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)</div>
+        <div id="run-stats">
+          <span id="run-handle">HANDLE // UNSET</span>
+          <button id="handle-edit" type="button" aria-label="Change your handle">EDIT</button>
+        </div>
         <div id="lift-prompt" role="status" aria-live="polite" hidden></div>
       </div>
     </div>

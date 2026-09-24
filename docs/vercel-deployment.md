@@ -18,6 +18,7 @@ a VPS and impossible on Vercel:
 | Collected addresses | `data/emails.jsonl` | `fs.appendFile` throws `EROFS` on a read-only filesystem |
 | Gate on/off toggle | `data/settings.json` | same |
 | Pending level-2 codes | in-process `Map` | each request can hit a different instance, so the one checking the code is not the one that sent it |
+| Shared high scores | `data/scores.jsonl` | same `EROFS` as the addresses |
 
 `/tmp` is writable but per-instance and wiped between invocations, so it solves
 none of them.
@@ -30,6 +31,9 @@ none of them.
 - `server/subscriberStore.mjs` — Postgres `subscribers` table, else `data/emails.jsonl`
 - `server/settings.mjs` — Postgres `settings` table, else `data/settings.json`
 - `server/verificationStore.mjs` — Postgres `pending_verifications` table, else the in-process `Map`
+- `server/scoreStore.mjs` — Postgres `high_scores` table, else `data/scores.jsonl`. The
+  client also keeps its own board in `localStorage`, so an unreachable API costs the
+  shared board, not the feature.
 
 Nothing else in the codebase knows which backend is live. That keeps
 `npm run dev` and `npm start` working with **zero database setup** — leave

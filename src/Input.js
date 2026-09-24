@@ -5,6 +5,7 @@ export class Input {
   constructor() {
     this.keys = new Set();
     this._pressed = new Set(); // keys that went down since the last endFrame()
+    this.suspended = false;
     this._mobileMoveX = 0;
     this._mobileMoveZ = 0;
     this._mobileSprint = false;
@@ -13,6 +14,7 @@ export class Input {
     this._mobileLiftPressed = false;
 
     this._onKeyDown = (e) => {
+      if (this.suspended) return;
       if (!this.keys.has(e.code)) this._pressed.add(e.code); // ignore auto-repeat
       this.keys.add(e.code);
     };
@@ -63,6 +65,13 @@ export class Input {
 
   triggerMobileLift() {
     this._mobileLiftPressed = true;
+  }
+
+  // Held while a text overlay (the handle prompt) is up: typing a handle must not
+  // also drive the player, and the keys held when it opened must not stay stuck.
+  setSuspended(suspended) {
+    this.suspended = suspended;
+    if (suspended) this.reset();
   }
 
   reset() {

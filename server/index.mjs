@@ -6,6 +6,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleStartVerificationRequest, handleCompleteVerificationRequest, handleSessionCheckRequest } from './requestHandler.mjs';
+import { handleScoresRequest } from './scoreHandlers.mjs';
 import {
   handleAdminLoginRequest,
   handleAdminLogoutRequest,
@@ -77,6 +78,7 @@ const server = http.createServer((req, res) => {
   if (url === '/api/subscribe/verify') return handleCompleteVerificationRequest(req, res);
   if (url === '/api/session') return handleSessionCheckRequest(req, res);
   if (url === '/api/gate-status') return handleGateStatusRequest(req, res);
+  if (url === '/api/scores') return handleScoresRequest(req, res);
   if (url === '/api/admin/login') return handleAdminLoginRequest(req, res);
   if (url === '/api/admin/logout') return handleAdminLogoutRequest(req, res);
   if (url === '/api/admin/me') return handleAdminMeRequest(req, res);

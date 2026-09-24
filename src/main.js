@@ -2,6 +2,8 @@ import { Game } from './Game.js';
 import { requestEmailAccess } from './EmailGate.js';
 
 const canvas = document.getElementById('app');
+// __APP_VERSION__ is package.json's version, inlined by vite.config.js.
+document.getElementById('app-version').textContent = `prototype ${__APP_VERSION__}`;
 const instructionsToggle = document.getElementById('instructions-toggle');
 const touchInstructions = document.querySelector('.touch-help');
 const coarsePointer = matchMedia('(any-pointer: coarse)');
@@ -41,7 +43,12 @@ instructionsToggle.addEventListener('click', toggleInstructions);
 window.addEventListener('pointerdown', syncAutomaticInstructions);
 coarsePointer.addEventListener('change', syncAutomaticInstructions);
 
-requestEmailAccess().then(() => game.start());
+// Start the loop first so the prompt sits over a rendered scene — the loop
+// freezes itself while it is open, so nothing moves until the handle is in.
+requestEmailAccess().then(() => {
+	game.start();
+	game.promptForHandleIfUnset();
+});
 
 if (import.meta.hot) {
 	import.meta.hot.dispose(() => {
