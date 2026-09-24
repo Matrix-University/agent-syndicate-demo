@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.1] - 2026-09-24
 
 ### Added
 
@@ -100,6 +100,15 @@ All notable changes to this project are documented in this file, which follows
 
 ### Fixed
 
+- Every `/api/` route now reaches the serverless function on Vercel, not just the
+  single-segment ones. `api/[...path].js` was being matched as a one-segment
+  dynamic route, so `/api/gate-status` and `/api/session` were answered while
+  `/api/admin/*` and `/api/subscribe/*` returned the platform's own 404 before the
+  function ever ran — the admin dashboard could not log in and no address could be
+  submitted. `vercel.json` now rewrites `/api/:path*` to the function explicitly
+  instead of relying on filename inference, and the handler falls back to the
+  catch-all's `path` param so it resolves the route whether `req.url` carries the
+  original path or the rewrite destination.
 - Throwing the carried car now works from the lift control as well as the attack
   control. The HUD prompt reads `J / LIFT — THROW THE CAR` and the touch button
   relabels itself to `THROW`, but only the attack input actually threw — pressing

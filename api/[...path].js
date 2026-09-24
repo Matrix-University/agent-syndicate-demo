@@ -33,9 +33,22 @@ const ROUTES = {
   '/api/admin/emails.csv': handleAdminEmailsCsvRequest,
 };
 
+// Vercel matched `api/[...path].js` as a single-segment route, so /api/admin/*
+// and /api/subscribe/* 404'd at the platform. vercel.json now rewrites /api/:path*
+// here explicitly. A rewrite normally leaves req.url as the original path, but if
+// the destination ever shows up instead, the catch-all's `path` param still has
+// the real segments — so try req.url first, then rebuild from the param.
+function resolve(req) {
+  const fromUrl = req.url.split('?')[0].replace(/\/+$/, '');
+  if (ROUTES[fromUrl]) return fromUrl;
+
+  const param = req.query?.path;
+  if (!param) return fromUrl;
+  return `/api/${Array.isArray(param) ? param.join('/') : param}`.replace(/\/+$/, '');
+}
+
 export default function handler(req, res) {
-  const pathname = req.url.split('?')[0].replace(/\/+$/, '');
-  const route = ROUTES[pathname];
+  const route = ROUTES[resolve(req)];
 
   if (!route) {
     res.statusCode = 404;
