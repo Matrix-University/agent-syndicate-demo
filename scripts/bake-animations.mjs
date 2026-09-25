@@ -19,6 +19,7 @@ import { synthesizeLocomotion } from './lib/locomotion.mjs';
 import { synthesizeCarry } from './lib/carry.mjs';
 import { synthesizeThrow } from './lib/throw.mjs';
 import { dressOutfit } from './lib/outfit.mjs';
+import { bulkUp } from './lib/physique.mjs';
 
 // Inputs live in models-src/ (not served to the browser); only the final baked
 // asset is written into public/models/.
@@ -169,6 +170,10 @@ console.log(
     .map(([region, tris]) => `${region} ${tris}`).join(', ')} tris; ` +
   `${outfit.accessoryTriangles} tris of aviators on Head.`
 );
+
+// Then built up into a bodybuilder, suit and all — mesh only again.
+const bulk = bulkUp(charDoc);
+console.log(`Bulked up the body (vertices moved up to ${(bulk * 100).toFixed(1)}cm).`);
 
 // Ship the library clips under their stable names. Runs after synthesis so the
 // recipes can still find their sources by the library's original names.

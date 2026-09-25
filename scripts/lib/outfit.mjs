@@ -6,18 +6,17 @@
 //
 // It works on the bind pose, inside the bake, so the look ships in the same
 // agent-dcl.glb the browser and Decentraland both load — no runtime tinting.
-// The body keeps the mannequin's own shape, and nothing here touches the
-// skeleton or the clips. (A muscle-bulk pass was tried and dropped: pushing the
-// mannequin's rigid pieces around reads lumpy, and its proportions read better.)
+// It dresses the mannequin's own shape — physique.mjs bulks body and outfit up
+// together afterwards — and nothing here touches the skeleton or the clips.
 //
 //   - The skinned mesh is split into one primitive per region (suit, skin,
 //     hair, shoes). The mannequin is built from rigid pieces, one per bone, so
 //     the bone that moves a vertex most names its region and the lines fall on
 //     the pieces' own seams.
 //   - Everything else is a thin skinned overlay raycast onto the body, each
-//     vertex weighted like the surface under it: shirt front, tie, cuffs,
-//     lapels, buttons, pockets, belt, seams and creases, brows, nose and mouth,
-//     and the hair. The body's triangles are too coarse to draw those in, and
+//     vertex weighted like the surface under it: shirt front, collar, tie,
+//     cuffs, lapels, buttons, pockets, belt, seams and creases, brows, nose and
+//     mouth, and the hair. The body's triangles are too coarse to draw those in, and
 //     its UVs overlap, so neither recolouring nor a texture could.
 //   - The aviators are rigid meshes parented to the Head bone.
 //
@@ -48,16 +47,16 @@ const MATERIALS = {
   frame: { color: [0.9, 0.74, 0.36], roughness: 0.3, metallic: 0.35 }, // aviators, buckle
 };
 
-// Heights and widths on the mannequin, which stands 1.81m in a T-pose facing
+// Heights and widths on the mannequin, which stands 1.83m in a T-pose facing
 // +Z with its left along +X. Pieces drawn on one side are mirrored.
 const V_BOTTOM = 1.16; // the jacket's V opens from the top button...
-const V_TOP = 1.53; // ...up to the collar
+const V_TOP = 1.5; // ...up to the collar
 const V_SPREAD = 0.3; // its half-width gained per metre up
 const TIE_TOP = 1.485;
 const TIE_KNOT = 1.445;
 // The lapel's outer edge, bottom to top; the dip at 1.42–1.44 is the notch.
 const LAPEL_EDGE = [[0.014, 1.16], [0.06, 1.26], [0.1, 1.36], [0.114, 1.415],
-  [0.099, 1.43], [0.108, 1.455], [0.112, 1.51]];
+  [0.099, 1.43], [0.108, 1.455], [0.11, 1.485]];
 const BUTTONS = [1.143, 1.078];
 // Below the lower button the fronts part towards the hem, showing the belt.
 const CUTAWAY_EDGE = [[0.004, 1.07], [0.02, 1.03], [0.045, 0.99], [0.07, 0.945], [0.085, 0.9]];
@@ -65,7 +64,7 @@ const HEM_Y = 0.9; // just below the seat, as a suit jacket hangs
 const BELT = [0.998, 1.028];
 const FLAP = { inner: 0.058, outer: 0.138, bottom: 1.03, top: 1.056 };
 const CREASE_X = 0.089; // down the middle of each leg
-const CUFF = [0.6, 0.646]; // along the forearm, between sleeve and hand
+const CUFF = [0.046, 0]; // back from the wrist, between sleeve and hand
 
 // Hair, relative to the measured head: where its lower edge sits, going round
 // from the forehead (0) to the nape (1, in half-turns). It frames the face,
@@ -78,10 +77,15 @@ const HAIR_BONES = new Set(['Head', 'neck_01', 'spine_03']); // what it may foll
 
 // Padded jacket shoulders: a raised ridge over each collarbone piece, from the
 // neck out to where the arm begins, highest over the middle.
-const PAD = { inner: 0.1, full: [0.125, 0.14], outer: 0.15, depth: 0.1, height: 0.012 };
+const PAD = { inner: 0.13, full: [0.16, 0.18], outer: 0.195, depth: 0.1, height: 0.012 };
 // The jaw: stubble over the lower face, thickening towards the jawline so the
 // mannequin's egg-shaped head reads square-jawed, and narrowing up to the lip.
-const JAW = { halfWidth: [0.058, 0.03], top: -0.058, thickness: 0.006 };
+const JAW = { halfWidth: [0.058, 0.03], top: -0.058, below: -0.025, thickness: 0.006 };
+
+// The shirt collar: an oval round the base of the neck (at depth `z`), from
+// `inner` out to `front`/`back`, cast down from `top` onto the yoke. The yoke
+// inside `rim` is shirt too, so the jacket can't show between collar and neck.
+const COLLAR = { top: 1.545, z: -0.011, inner: 0.035, front: 0.115, back: 0.1, rim: 0.095 };
 
 const FINGER = /^(thumb|index|middle|ring|pinky)/;
 
@@ -92,7 +96,12 @@ function regionOf(bone, x, y, z) {
     const scalp = (y > 1.742 && z < 0.06) || (z < -0.015 && y > 1.62) || (ax > 0.072 && y > 1.675 && z < 0.07);
     return scalp ? 'hair' : 'skin';
   }
-  if (bone === 'neck_01') return y < 1.522 || z < -0.02 ? 'shirt' : 'skin'; // the collar
+  // All collar, up to the jaw: the neck's long triangles would split shirt
+  // from skin in a zigzag, and a bodybuilder's collar rides that high anyway.
+  if (bone === 'neck_01') return 'shirt';
+  if ((bone.startsWith('clavicle') || bone === 'spine_03') && Math.hypot(x, z - COLLAR.z) < COLLAR.rim) {
+    return 'shirt';
+  }
   if (bone.startsWith('hand') || FINGER.test(bone)) return 'skin';
   if (bone.startsWith('foot') || bone.startsWith('ball')) return 'shoes';
   if (bone.startsWith('calf')) return y < 0.115 ? 'shoes' : 'suit';
@@ -107,6 +116,7 @@ export function dressOutfit(doc) {
   const counts = {};
   const tally = (name, triangles) => { counts[name] = (counts[name] ?? 0) + triangles; };
   const headSamples = [];
+  let headShape = null;
 
   for (const node of root.listNodes()) {
     const mesh = node.getMesh();
@@ -134,9 +144,10 @@ export function dressOutfit(doc) {
       if (!layers.has(name)) layers.set(name, new Overlay(surface.JointArray, options));
       return layers.get(name);
     };
-    const headShape = measureHead(headSamples);
+    headShape = measureHead(headSamples, surface);
     shirtFront(surface, layer('shirt'));
     cuffs(surface, layer('shirt'), joints);
+    collar(surface, layer('shirt'));
     belt(surface, layer('shirt'));
     tie(surface, layer('tie'));
     lapels(surface, layer('trim'));
@@ -157,9 +168,7 @@ export function dressOutfit(doc) {
   }
 
   const head = root.listNodes().find((n) => n.getName() === 'Head');
-  const aviators = head && headSamples.length
-    ? addAviators(doc, buffer, head, measureHead(headSamples), materials)
-    : 0;
+  const aviators = head && headShape ? addAviators(doc, buffer, head, headShape, materials) : 0;
   return { triangles: counts, accessoryTriangles: aviators };
 }
 
@@ -438,7 +447,7 @@ function sheet(surface, overlay, rows, cols, rayAt, offset, accept = () => true)
 }
 
 /** Fills between left(y) and right(y), from `from` up to `to`, cast from `side`. */
-function span(surface, overlay, { from, to, left, right, rows, cols, offset, side = 1 }) {
+function span(surface, overlay, { from, to, left, right, rows, cols, offset, side = 1, accept }) {
   sheet(surface, overlay, rows, cols, (u, v) => {
     const y = from + (to - from) * v;
     const x = left(y) + (right(y) - left(y)) * u;
@@ -446,7 +455,7 @@ function span(surface, overlay, { from, to, left, right, rows, cols, offset, sid
       origin: new THREE.Vector3(x, y, side),
       direction: new THREE.Vector3(0, 0, -side),
     };
-  }, offset);
+  }, offset, accept);
 }
 
 /** A strip `width` wide along a polyline of (x, y) points, cast from `side`. */
@@ -650,8 +659,9 @@ function cuffs(surface, overlay, joints) {
     const axis = new THREE.Vector3(...wrist.getWorldTranslation()).sub(start).normalize();
     const across = new THREE.Vector3(0, 1, 0).cross(axis).normalize();
     const up = axis.clone().cross(across).normalize();
-    const from = CUFF[0] - Math.abs(start.x);
-    const to = CUFF[1] - Math.abs(start.x);
+    const length = new THREE.Vector3(...wrist.getWorldTranslation()).distanceTo(start);
+    const from = length - CUFF[0];
+    const to = length - CUFF[1];
     sheet(surface, overlay, 3, 20, (u, v) => {
       const centre = start.clone().addScaledVector(axis, from + (to - from) * v);
       const angle = u * Math.PI * 2;
@@ -661,9 +671,24 @@ function cuffs(surface, overlay, joints) {
   }
 }
 
+// Only the yoke takes it: rays that land on the neck are dropped, and the
+// holes they leave are against a neck that is shirt already.
+function collar(surface, overlay) {
+  const down = new THREE.Vector3(0, -1, 0);
+  sheet(surface, overlay, 6, 40, (u, v) => {
+    const angle = u * Math.PI * 2;
+    const reach = THREE.MathUtils.lerp(COLLAR.front, COLLAR.back, (1 - Math.cos(angle)) / 2);
+    const r = COLLAR.inner + (reach - COLLAR.inner) * v;
+    return {
+      origin: new THREE.Vector3(Math.sin(angle) * r, COLLAR.top, COLLAR.z + Math.cos(angle) * r),
+      direction: down,
+    };
+  }, 0.004, (hit) => hit.bone.startsWith('clavicle') || hit.bone === 'spine_03');
+}
+
 // --- Head ------------------------------------------------------------------
 
-function measureHead(samples) {
+function measureHead(samples, surface) {
   let top = -Infinity;
   let bottom = Infinity;
   let minZ = Infinity;
@@ -677,10 +702,12 @@ function measureHead(samples) {
     halfWidth = Math.max(halfWidth, Math.abs(x));
   }
   const eyeY = bottom + (top - bottom) * 0.55;
-  // The brow at eye height, a little off centre — where the lenses sit.
+  // The face at eye height, under each lens — cast, since a low-poly head may
+  // have no vertex there and the nearest ones sampled are the back of the skull.
   let eyeZ = -Infinity;
-  for (const [x, y, z] of samples) {
-    if (Math.abs(y - eyeY) < 0.015 && Math.abs(x) > 0.02 && Math.abs(x) < 0.05) eyeZ = Math.max(eyeZ, z);
+  for (const side of [-1, 1]) {
+    const hit = surface.castAt(side * 0.036, eyeY);
+    if (hit?.bone === 'Head') eyeZ = Math.max(eyeZ, hit.point.z);
   }
   if (!Number.isFinite(eyeZ)) eyeZ = maxZ - 0.02;
   return {
@@ -693,14 +720,16 @@ function measureHead(samples) {
 // Brows over the glasses, a nose under their bridge and a set mouth — enough
 // for the face to read as one behind the shades.
 function face(surface, features, skin, stubble, head) {
-  // Stubble over the lower face, thicker towards the jawline.
-  const jawBottom = head.bottom + 0.004;
+  // Stubble over the lower face, thicker towards the jawline, carried down
+  // under the chin onto the throat so it hides where the head's triangles
+  // meet the collar's in a zigzag.
+  const jawBottom = head.bottom + JAW.below;
   const jawTop = head.eyeY + JAW.top;
-  const jawHalf = (y) => THREE.MathUtils.lerp(JAW.halfWidth[0], JAW.halfWidth[1], (y - jawBottom) / (jawTop - jawBottom));
+  const jawHalf = (y) => THREE.MathUtils.lerp(JAW.halfWidth[0], JAW.halfWidth[1], THREE.MathUtils.clamp((y - head.bottom) / (jawTop - head.bottom), 0, 1));
   span(surface, stubble, {
-    from: jawBottom, to: jawTop, rows: 10, cols: 12,
+    from: jawBottom, to: jawTop, rows: 14, cols: 12,
     left: (y) => -jawHalf(y), right: jawHalf,
-    offset: (hit) => 0.0015 + JAW.thickness * (1 - (hit.point.y - jawBottom) / (jawTop - jawBottom)),
+    offset: (hit) => 0.0015 + JAW.thickness * THREE.MathUtils.clamp(1 - (hit.point.y - head.bottom) / (jawTop - head.bottom), 0, 1),
   });
 
   const browY = head.eyeY + 0.03;

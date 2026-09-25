@@ -42,11 +42,11 @@ The gate has three levels, set with `EMAIL_GATE_LEVEL` (see `.env.example` and
 `server/gateLevel.mjs`). It is **level 0 — off — by default**, so the game stays
 playable before an SMTP relay exists:
 
-| Level | Player sees | Address is stored | Needs SMTP | `/admin.html` |
-| --- | --- | --- | --- | --- |
-| `0` off | nothing — straight to the game | never | no | not built |
-| `1` collect | email form | on submit, **unverified** | no | built |
-| `2` verify | email form, then a 6-digit code | only once the code matches | yes | built |
+| Level       | Player sees                     | Address is stored          | Needs SMTP | `/admin.html` |
+| ----------- | ------------------------------- | -------------------------- | ---------- | ------------- |
+| `0` off     | nothing — straight to the game  | never                      | no         | not built     |
+| `1` collect | email form                      | on submit, **unverified**  | no         | built         |
+| `2` verify  | email form, then a 6-digit code | only once the code matches | yes        | built         |
 
 Level 1 is the one to run before a relay is working: it collects a list without
 being able to send anything, at the cost of addresses nobody has proven they own.
@@ -300,8 +300,65 @@ To use a real character:
    and `modelYaw` (`Math.PI` if it faces the camera when moving forward).
 
 Clips bind by case-insensitive name match (`CLIP_NAMES` in `Player.js`); the
-movement code in `update()` is untouched. **Mixamo** also works — it exports
-`.fbx`, so convert to `.glb` in [Blender](https://www.blender.org) first.
+movement code in `update()` is untouched. **Mixamo** can be used as a source;
+its `.fbx` clips need to be retargeted to the agent rig in
+[Blender](https://www.blender.org) before baking.
+
+## Animation sources
+
+The shipped character uses one baked `public/models/agent-dcl.glb` for the
+browser and Decentraland. External clips must be retargeted to the agent rig and
+baked into that file; do not ship a source library as a separate runtime asset.
+See [docs/baking-animations.md](docs/baking-animations.md) and
+[models-src/README.md](models-src/README.md). BVH and FBX clips are not
+drop-in replacements for the current same-rig GLB source.
+
+### Suitable for a shipped game
+
+- [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu/) — the
+  [FAQ](http://mocap.cs.cmu.edu/faqs.php) permits use in commercial products,
+  but prohibits reselling the data by itself, including converted versions.
+  Include the acknowledgment requested by CMU when publishing. The data needs
+  conversion and retargeting before baking.
+- [Kenney assets](https://kenney.nl/assets) — Kenney states that assets on its
+  asset pages use [CC0 and may be used commercially](https://kenney.nl/support),
+  with no attribution required. Kenney is a general game-asset source rather
+  than a dedicated mocap library; check that the specific pack includes a
+  rigged character or animation suitable for this project.
+
+### Check the specific license before shipping
+
+- [Rokoko Motion Library](https://www.rokoko.com/products/motion-library) —
+  [Rokoko's guide](https://support.rokoko.com/hc/en-us/articles/4410021327121-Getting-Started-Rokoko-Studio-Motion-Library)
+  says owned motions download as FBX with skeleton movement only. The library
+  includes free and paid assets; verify the selected asset's license allows
+  commercial game use and inclusion in a web-delivered GLB. Retarget the FBX
+  before baking.
+- [ActorCore motions](https://actorcore.reallusion.com/3d-motion) — the
+  [Content EULA](https://actorcore.reallusion.com/eula) describes commercial
+  game use under its Standard License, but also has restrictions that may apply
+  to embedding or exposing source content. Because this game's GLB is publicly
+  downloadable, confirm with Reallusion that the specific motion can be
+  distributed this way before using it.
+
+### Not cleared for a commercial release
+
+- [Bandai Namco Research Motion Dataset](https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset)
+  — both datasets are [CC BY-NC 4.0](https://github.com/BandaiNamcoResearchInc/Bandai-Namco-Research-Motiondataset#license),
+  so they are for non-commercial use only. They include BVH motion data and
+  could be useful for non-commercial experiments, but do not ship them in a
+  commercial game without separate permission.
+- [DeepMotion Animate 3D](https://www.deepmotion.com/animate-3d) — its
+  [terms](https://www.deepmotion.com/terms-of-use) limit the Freemium plan to
+  non-commercial use. Paid plans grant commercial use of generated products,
+  but the terms also restrict redistribution and require assets not to be
+  extractable from the finished work. Since this project's GLB is directly
+  downloadable, treat DeepMotion output as not cleared for the shipped game
+  unless DeepMotion confirms this distribution model in writing.
+
+These notes summarize the linked terms, not legal advice. Recheck the current
+terms for the exact asset and plan before release; keep a record of the asset
+page, license, and any required attribution.
 
 ## Where this goes next (the roadmap)
 

@@ -35,25 +35,32 @@ the *existing* body. No sunglasses, no hairstyle, no muscle silhouette — just 
 
 ### Level 1½ — Dress the mannequin in the bake (what ships today)
 `scripts/lib/outfit.mjs` runs inside `npm run bake:anims:dcl` and dresses the
-existing mesh as the player from `image references/AGENT_HULK_SHEET.png`, so both
-targets get it from the one GLB:
+existing mesh as the player from `image references/AGENT_HULK_SHEET.png`, then
+`scripts/lib/physique.mjs` builds it up into a bodybuilder, so both targets get
+it from the one GLB:
 
-- **Keep the body.** The mannequin's own proportions are the look; a
-  muscle-bulk pass (pushing its rigid pieces out) was tried and read lumpy.
+- **The male mannequin.** `models-src/agent.glb` is UAL2's `Mannequin` with its
+  clips stripped — the body the library's clips were authored on. They carry its
+  bone translations, so a different body is stretched to fit at runtime.
+- **Bulked, not reshaped piece by piece.** Each bone scales its cross-section
+  out from its own axis (deltoids, arms, chest, back, traps, neck, thighs),
+  blended by skin weight, so the rigid pieces grow together and stay flush.
+  Pushing the pieces out independently was tried and read lumpy. It runs after
+  the outfit, so the overlays grow with the body.
 - **Regions by bone** — suit, skin, hair, shoes are material splits along the
   mannequin's own piece seams (its UVs overlap, so a painted texture is out).
 - **Everything else is an overlay** — thin skinned meshes raycast onto the body,
   each vertex copying the skin weights of the surface under it, so edges stay
-  crisp however coarse the body's triangles are: shirt V and tie, notched lapels
+  crisp however coarse the body's triangles are: shirt V, collar and tie, notched lapels
   and their edges, buttons, flap pockets, the cutaway with belt and buckle, hem,
   back seam and vent, trouser creases, cuffs, padded shoulders (on the collarbone
   pieces only, so they can't tear as the arms swing), stubble, brows, nose and
   mouth, and the hair — a shell that follows the head on top and the neck behind.
 - **Aviators** — rigid meshes parented to the `Head` bone.
 
-> Result: reads clearly as the sheet at game distance, but it is still the
-> mannequin underneath — the Hulk's bulk, real faces, cloth folds and hair
-> strands need Level 2.
+> Result: reads clearly as the sheet at game distance, with a bodybuilder's
+> silhouette, but it is still the segmented mannequin underneath — smooth
+> anatomy, real faces, cloth folds and hair strands need Level 2.
 
 ### Level 2 — Actually match the concept (the real path)
 Sunglasses, hairstyle, muscular proportions, and a tailored suit are **geometry**,

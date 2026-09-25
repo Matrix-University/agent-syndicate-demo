@@ -154,15 +154,26 @@ throw is a one-armed grenade toss. Three recipe modules sit on the shared pose k
   `THROW_PROFILE.release / .duration` — it is the frame the car leaves the hands,
   and the arms are authored to reach full extension exactly there.
 
-**The character is dressed in the bake, too.** `scripts/lib/outfit.mjs` turns the
-mannequin into the player from `docs/image references/AGENT_HULK_SHEET.png`
-(white two-button suit, black shirt, gold tie, belt, blond shoulder-length hair,
-stubble, aviators) **on the mannequin's own body — don't reshape it**; a muscle-bulk
-pass was tried and read lumpy. It splits the skinned mesh into region materials by
-bone, then raycasts everything else on as thin skinned overlays, each vertex
-weighted like the surface under it (shirt V, tie, lapels, buttons, pockets, seams,
-face, pads, hair); only the aviators are rigid on `Head`. Mesh and materials only —
-the skeleton and clips are untouched, and both targets get the look from the one GLB.
+**The character is dressed and built up in the bake, too.** `models-src/agent.glb`
+is UAL2's male `Mannequin` — the body the clips were authored on. Keep it: every
+clip carries that skeleton's bone translations, so any other body gets stretched
+to fit (the female mannequin that shipped before had its arms pulled 24% long).
+`scripts/lib/outfit.mjs` dresses it as the player from
+`docs/image references/AGENT_HULK_SHEET.png` (white two-button suit, black shirt,
+gold tie, belt, blond shoulder-length hair, stubble, aviators). It splits the
+skinned mesh into region materials by bone, then raycasts everything else on as
+thin skinned overlays, each vertex weighted like the surface under it (shirt V,
+tie, lapels, collar, buttons, pockets, seams, face, pads, hair); only the aviators
+are rigid on `Head`. Measure off the mesh with casts, not vertex samples — the male
+head is low-poly, and sampling put the aviators inside the skull.
+Then `scripts/lib/physique.mjs` bulks body and outfit together into the
+bodybuilder (`docs/image references/ChatGPT_Image_Jun_15_2026_08_55_47_PM.png`):
+each bone scales its cross-section out from its own axis by gains that ease along
+the bone, blended by skin weight, so neighbouring pieces meet flush. Don't push
+the mannequin's rigid pieces around independently — that was tried and read lumpy.
+Keep the width under the armpits modest (`TORSO` side gain) or the hanging arms
+sink into the lats. Mesh and materials only — the skeleton and clips are
+untouched, and both targets get the look from the one GLB.
 
 The agents (`src/AgentKit.js`) are procedural, after the BLACK/BROWN/BLONDE sheets.
 Every `Enemy` shares one kit of geometry and materials (`AgentKit.acquire()` /

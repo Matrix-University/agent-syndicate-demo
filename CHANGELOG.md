@@ -6,6 +6,36 @@ All notable changes to this project are documented in this file, which follows
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-25
+
+### Added
+
+- An "Animation sources" section in `README.md`: external clips must be
+  retargeted to the agent rig and baked into `agent-dcl.glb` rather than
+  shipped as a separate file, and a shortlist of motion libraries sorted by
+  whether their licences clear a commercial, publicly downloadable GLB (CMU and
+  Kenney yes; Rokoko and ActorCore check the asset; Bandai Namco and DeepMotion
+  no).
+
+### Changed
+
+- The player is built like a bodybuilder, after
+  `docs/image references/ChatGPT_Image_Jun_15_2026_08_55_47_PM.png`: capped
+  deltoids, thick arms and forearms, a deep chest, a broad back that tapers to
+  the waist, raised traps, a thick neck, heavier thighs and calves, and bigger
+  fists, with the suit, tie, lapels and hair growing with the body. A new step
+  in `npm run bake:anims:dcl` (`scripts/lib/physique.mjs`) does it, so the
+  browser and Decentraland still load the same `agent-dcl.glb`, and the
+  skeleton and clips are unchanged.
+- The player's body is now the male mannequin from the clip library
+  (`models-src/agent.glb`), in place of the female one. The clips were authored
+  on it, so the arms are no longer stretched to fit the clips' longer bones.
+- The outfit is refitted to the new body: the aviators sit on the face again,
+  the cuffs sit at the wrists, a black shirt collar circles the neck, and the
+  stubble runs cleanly under the chin.
+- `README.md` no longer says Mixamo clips work after a plain FBX-to-GLB
+  conversion: they have to be retargeted to the agent rig before baking.
+
 ## [0.5.2] - 2026-09-25
 
 ### Changed
