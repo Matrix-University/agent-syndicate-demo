@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AgentKit } from './AgentKit.js';
 
 const HIT_REACTION_DURATION = 0.24;
 const DEATH_DURATION = 0.7;
@@ -8,11 +9,10 @@ const STRIKE_DURATION = 0.16;
 const RECOVER_DURATION = 0.9;
 const APPROACH_TIMEOUT = 4;
 const HAIR_VARIANTS = ['black', 'brown', 'blonde'];
-const HAIR_COLORS = {
-  black: 0x050706,
-  brown: 0x3a2014,
-  blonde: 0xc9ad68,
-};
+// Walk cycle: radians of stride per metre covered, and the swing at full speed.
+const STRIDE_PER_METRE = 2.4;
+const LEG_SWING = 0.55;
+const ARM_SWING = 0.4;
 
 export class Enemy {
   constructor(opts = {}) {
@@ -48,111 +48,20 @@ export class Enemy {
 
     this._toTarget = new THREE.Vector3();
     this._orbitPoint = new THREE.Vector3();
+    this._lastPosition = new THREE.Vector3();
+    this._stride = 0;
+    this._swing = 0;
 
-    this._buildPlaceholderRig();
+    this._buildRig();
   }
 
-  _buildPlaceholderRig() {
-    this._suitMaterial = new THREE.MeshStandardMaterial({
-      color: 0x111613,
-      emissive: 0x39ff14,
-      emissiveIntensity: 0,
-      roughness: 0.62,
-      metalness: 0.16,
-    });
-    const skinMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8f5436,
-      roughness: 0.72,
-      metalness: 0,
-    });
-    const accentMaterial = new THREE.MeshStandardMaterial({
-      color: 0x050706,
-      roughness: 0.58,
-      metalness: 0.12,
-    });
-    const hairMaterial = new THREE.MeshStandardMaterial({
-      color: HAIR_COLORS[this.hairVariant] ?? HAIR_COLORS.black,
-      roughness: 0.72,
-      metalness: 0.04,
-    });
-    const shirtMaterial = new THREE.MeshStandardMaterial({
-      color: 0xe8ebe7,
-      roughness: 0.82,
-      metalness: 0,
-    });
-    const glassesMaterial = new THREE.MeshStandardMaterial({
-      color: 0x020303,
-      roughness: 0.2,
-      metalness: 0.55,
-    });
-
-    const torso = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.5, 1, 6, 12),
-      this._suitMaterial
-    );
-    torso.position.y = 1.85;
-    torso.castShadow = true;
-    this.rig.add(torso);
-
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.4, 16, 16),
-      skinMaterial
-    );
-    head.position.y = 2.92;
-    head.castShadow = true;
-    this.rig.add(head);
-
-    const hair = new THREE.Mesh(
-      new THREE.SphereGeometry(0.42, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.52),
-      hairMaterial
-    );
-    hair.position.set(0, 2.98, -0.015);
-    hair.scale.z = 0.92;
-    hair.rotation.x = -0.12;
-    hair.castShadow = true;
-    this.rig.add(hair);
-
-    const sideHairGeometry = new THREE.BoxGeometry(0.08, 0.24, 0.22);
-    for (const x of [-0.35, 0.35]) {
-      const sideHair = new THREE.Mesh(sideHairGeometry, hairMaterial);
-      sideHair.position.set(x, 3.01, -0.02);
-      sideHair.castShadow = true;
-      this.rig.add(sideHair);
-    }
-
-    const glasses = new THREE.Mesh(
-      new THREE.BoxGeometry(0.72, 0.15, 0.08),
-      glassesMaterial
-    );
-    glasses.position.set(0, 2.99, 0.35);
-    glasses.castShadow = true;
-    this.rig.add(glasses);
-
-    const shirt = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.5, 0.07),
-      shirtMaterial
-    );
-    shirt.position.set(0, 2.08, 0.48);
-    this.rig.add(shirt);
-
-    const tie = new THREE.Mesh(
-      new THREE.BoxGeometry(0.11, 0.46, 0.06),
-      accentMaterial
-    );
-    tie.position.set(0, 2.03, 0.53);
-    this.rig.add(tie);
-
-    const limbGeometry = new THREE.CapsuleGeometry(0.16, 0.78, 4, 8);
-    limbGeometry.translate(0, -0.57, 0);
-    const limbs = [];
-    for (const [x, y] of [[-0.7, 2.35], [0.7, 2.35], [-0.25, 1.32], [0.25, 1.32]]) {
-      const limb = new THREE.Mesh(limbGeometry, this._suitMaterial);
-      limb.position.set(x, y, 0);
-      limb.castShadow = true;
-      this.rig.add(limb);
-      limbs.push(limb);
-    }
-    [this.armL, this.armR, this.legL, this.legR] = limbs;
+  // Built from the shared agent kit; only the suit is this agent's own, since
+  // its emissive is the hit flash.
+  _buildRig() {
+    this._kit = AgentKit.acquire();
+    this._suitMaterial = this._kit.suit.clone();
+    const limbs = this._kit.assemble(this.rig, this.hairVariant, this._suitMaterial);
+    ({ armL: this.armL, armR: this.armR, legL: this.legL, legR: this.legR } = limbs);
   }
 
   get attackActive() {
@@ -212,6 +121,30 @@ export class Enemy {
     }
 
     if (this.alive && player) this._updateAI(dt, player, world);
+    this._animateWalk(dt);
+  }
+
+  // Legs and the free arm swing with ground speed, measured from how far the
+  // root actually moved — orbit, approach and knockback all walk the same way.
+  _animateWalk(dt) {
+    const moved = Math.hypot(
+      this.root.position.x - this._lastPosition.x,
+      this.root.position.z - this._lastPosition.z
+    );
+    this._lastPosition.copy(this.root.position);
+    const speed = dt > 0 ? moved / dt : 0;
+    const target = this.alive ? Math.min(speed / this.moveSpeed, 1) : 0;
+    this._swing += (target - this._swing) * (1 - Math.exp(-8 * dt));
+    this._stride += moved * STRIDE_PER_METRE;
+    const phase = Math.sin(this._stride);
+    this.legL.rotation.x = phase * LEG_SWING * this._swing;
+    this.legR.rotation.x = -phase * LEG_SWING * this._swing;
+    this.armL.rotation.x = -phase * ARM_SWING * this._swing;
+    // The right arm is the punching arm; it only swings while nothing else
+    // (windup, strike, recovery) is driving it.
+    if (this.aiState === 'orbit' || this.aiState === 'approach') {
+      this.armR.rotation.x = phase * ARM_SWING * this._swing;
+    }
   }
 
   _updateAI(dt, player, world) {
@@ -323,31 +256,20 @@ export class Enemy {
     this._hasSlot = false;
     this._strikeHitConsumed = true;
     this.armR.rotation.x = 0;
+    this._swing = 0;
+    this._lastPosition.copy(this.root.position);
   }
 
+  // The kit's geometry and materials are shared by every agent, so only this
+  // agent's suit is freed here; the kit frees itself with its last user.
   dispose() {
     if (!this._disposed) {
       this._disposed = true;
       this.root.removeFromParent();
-      disposeObject(this.root);
+      this._suitMaterial.dispose();
+      AgentKit.release();
     }
   }
-}
-
-function disposeObject(object) {
-  const geometries = new Set();
-  const materials = new Set();
-  object.traverse((child) => {
-    if (child.geometry) geometries.add(child.geometry);
-    if (child.material) {
-      const childMaterials = Array.isArray(child.material)
-        ? child.material
-        : [child.material];
-      childMaterials.forEach((material) => materials.add(material));
-    }
-  });
-  geometries.forEach((geometry) => geometry.dispose());
-  materials.forEach((material) => material.dispose());
 }
 
 function dampAngle(current, target, speed, dt) {

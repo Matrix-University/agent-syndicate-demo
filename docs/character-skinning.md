@@ -33,6 +33,28 @@ the *existing* body. No sunglasses, no hairstyle, no muscle silhouette — just 
 > Result: the *current* body wearing suit colors — it will **not** look like the
 > concept. Sunglasses / hair / proportions are geometry, not color.
 
+### Level 1½ — Dress the mannequin in the bake (what ships today)
+`scripts/lib/outfit.mjs` runs inside `npm run bake:anims:dcl` and dresses the
+existing mesh as the player from `image references/AGENT_HULK_SHEET.png`, so both
+targets get it from the one GLB:
+
+- **Keep the body.** The mannequin's own proportions are the look; a
+  muscle-bulk pass (pushing its rigid pieces out) was tried and read lumpy.
+- **Regions by bone** — suit, skin, hair, shoes are material splits along the
+  mannequin's own piece seams (its UVs overlap, so a painted texture is out).
+- **Everything else is an overlay** — thin skinned meshes raycast onto the body,
+  each vertex copying the skin weights of the surface under it, so edges stay
+  crisp however coarse the body's triangles are: shirt V and tie, notched lapels
+  and their edges, buttons, flap pockets, the cutaway with belt and buckle, hem,
+  back seam and vent, trouser creases, cuffs, padded shoulders (on the collarbone
+  pieces only, so they can't tear as the arms swing), stubble, brows, nose and
+  mouth, and the hair — a shell that follows the head on top and the neck behind.
+- **Aviators** — rigid meshes parented to the `Head` bone.
+
+> Result: reads clearly as the sheet at game distance, but it is still the
+> mannequin underneath — the Hulk's bulk, real faces, cloth folds and hair
+> strands need Level 2.
+
 ### Level 2 — Actually match the concept (the real path)
 Sunglasses, hairstyle, muscular proportions, and a tailored suit are **geometry**,
 so you need a new mesh. DCL-safe pipeline:

@@ -35,6 +35,7 @@ src/Game.js              renderer, scene, camera, the update loop
 src/World.js             lights, floor, grid, blockout pillars
 src/LiftableCar.js       the one car the player can lift and throw
 src/Player.js            character: rig, movement, animation state machine
+src/AgentKit.js          the System Agents' look: shared, ref-counted suit/face/hair meshes
 src/ThirdPersonCamera.js smooth follow camera
 src/Input.js             keyboard state + movement axes
 src/PlayerProfile.js     handle + personal best, in localStorage
@@ -152,6 +153,21 @@ throw is a one-armed grenade toss. Three recipe modules sit on the shared pose k
   take the per-frame result. `RELEASE` in that table **must** stay at
   `THROW_PROFILE.release / .duration` — it is the frame the car leaves the hands,
   and the arms are authored to reach full extension exactly there.
+
+**The character is dressed in the bake, too.** `scripts/lib/outfit.mjs` turns the
+mannequin into the player from `docs/image references/AGENT_HULK_SHEET.png`
+(white two-button suit, black shirt, gold tie, belt, blond shoulder-length hair,
+stubble, aviators) **on the mannequin's own body — don't reshape it**; a muscle-bulk
+pass was tried and read lumpy. It splits the skinned mesh into region materials by
+bone, then raycasts everything else on as thin skinned overlays, each vertex
+weighted like the surface under it (shirt V, tie, lapels, buttons, pockets, seams,
+face, pads, hair); only the aviators are rigid on `Head`. Mesh and materials only —
+the skeleton and clips are untouched, and both targets get the look from the one GLB.
+
+The agents (`src/AgentKit.js`) are procedural, after the BLACK/BROWN/BLONDE sheets.
+Every `Enemy` shares one kit of geometry and materials (`AgentKit.acquire()` /
+`release()`, freed with the last user) except its suit, which it clones because
+the suit's emissive is that agent's hit flash. Keep new agent parts in the kit.
 
 **The authored clips are additive — never overwrite a shipped clip to make room.**
 `Walk_Carry_Loop` is both an authoring source _and_ a shipped clip (renamed

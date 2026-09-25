@@ -18,6 +18,7 @@ import { buildSkeleton } from './lib/skeleton.mjs';
 import { synthesizeLocomotion } from './lib/locomotion.mjs';
 import { synthesizeCarry } from './lib/carry.mjs';
 import { synthesizeThrow } from './lib/throw.mjs';
+import { dressOutfit } from './lib/outfit.mjs';
 
 // Inputs live in models-src/ (not served to the browser); only the final baked
 // asset is written into public/models/.
@@ -157,6 +158,16 @@ console.log(
   `${throwStats.duration}s, release at ${throwStats.releaseAt.toFixed(2)}s; ` +
   `foot-lock shifted the pelvis by up to ` +
   `${(throwStats.footLockMaxLift * 100).toFixed(1)}cm).`
+);
+
+// The mannequin ships dressed as the player (docs/image references/
+// AGENT_HULK_SHEET.png). Mesh and materials only — the skeleton the clips bind
+// to is untouched.
+const outfit = dressOutfit(charDoc);
+console.log(
+  `Dressed the character: ${Object.entries(outfit.triangles)
+    .map(([region, tris]) => `${region} ${tris}`).join(', ')} tris; ` +
+  `${outfit.accessoryTriangles} tris of aviators on Head.`
 );
 
 // Ship the library clips under their stable names. Runs after synthesis so the

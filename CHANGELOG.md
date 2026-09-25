@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.5.2] - 2026-09-25
+
+### Changed
+
+- The player is dressed after `docs/image references/AGENT_HULK_SHEET.png` on
+  the mannequin's own body: a white two-button suit with notched lapels, flap
+  pockets, padded shoulders, a vented back and creased trousers, a black shirt
+  and cuffs, a gold tie, a black belt with a gold buckle, black shoes, blond
+  shoulder-length hair, a stubbled jaw with brows, nose and mouth, and gold
+  aviators. It is baked into `public/models/agent-dcl.glb` by a new outfit step in
+  `npm run bake:anims:dcl` (`scripts/lib/outfit.mjs`), so the browser and
+  Decentraland still load the same file; the skeleton and clips are unchanged.
+- The System Agents are rebuilt after the BLACK, BROWN and BLONDE agent sheets:
+  fitted black two-button suits with lapels, pocket flaps and a fabric grain,
+  white shirt and collar, slim black tie and silver clip, slim rectangular
+  shades, a coiled earpiece in the right ear, oxfords, hands, a jawed face with
+  nose and ears, and a slicked widow's peak (black, brown) or short crop
+  (blonde). They share one reference-counted kit of geometry and materials
+  (`src/AgentKit.js`) instead of building their own, and they now walk — legs
+  and the free arm swing with ground speed.
+
 ## [0.5.2] - 2026-09-24
 
 ### Added
