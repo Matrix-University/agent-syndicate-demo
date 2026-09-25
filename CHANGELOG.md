@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-09-24
+
+### Changed
+
+- The mobile HUD (≤700px wide) is a compact panel: smaller type, tighter
+  buttons, and a two-column grid for the health meters with the objective and
+  lift prompt spanning the full width. The objective truncates to one line
+  instead of wrapping.
+- On landscape phones (≤520px tall) the HUD becomes a narrow left column and
+  hides the heading title, so it no longer covers the playfield.
+- Control instructions start minimized on phone-width screens, whatever the
+  saved cookie says.
+- On small screens RFZAMP docks to the bottom edge, rolled up to a narrower
+  windowshade when off, and the touch controls move up to clear it when it is
+  on.
+- The HUD, arcade bar and touch controls are hidden while the game-over panel
+  is on screen on phone-width screens, so the board has the whole view.
+
+### Fixed
+
+- Overlays now stack in a fixed order — touch controls, then HUD/arcade
+  bar/RFZAMP, then the damage flash, then the game-over panel — so the panel is
+  never drawn under the HUD or the radio.
+
 ## [0.5.0] - 2026-09-24
 
 ### Changed

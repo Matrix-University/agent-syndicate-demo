@@ -21,6 +21,7 @@
       #app { width: 100vw; height: 100vh; display: block; touch-action: none; }
       #hud {
         position: fixed;
+        z-index: 3;
         top: max(14px, env(safe-area-inset-top));
         left: max(16px, env(safe-area-inset-left));
         right: max(16px, env(safe-area-inset-right));
@@ -105,6 +106,7 @@
       }
       #arcade-bar {
         position: fixed;
+        z-index: 3;
         top: max(10px, env(safe-area-inset-top));
         left: 50%;
         transform: translateX(-50%);
@@ -203,6 +205,7 @@
       #lift-prompt[hidden] { display: none; }
       #damage-flash {
         position: fixed;
+        z-index: 4;
         inset: 0;
         opacity: 0;
         pointer-events: none;
@@ -216,7 +219,7 @@
       #game-over {
         position: fixed;
         inset: 0;
-        z-index: 2;
+        z-index: 5;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -278,6 +281,7 @@
       #mobile-controls {
         display: none;
         position: fixed;
+        z-index: 2;
         inset: 0;
         pointer-events: none;
         user-select: none;
@@ -410,7 +414,81 @@
       @media (max-width: 700px) {
         #arcade-bar { gap: 22px; }
         .arcade-value { font-size: 13px; }
-        #hud { top: calc(max(14px, env(safe-area-inset-top)) + 38px); }
+        #hud {
+          top: calc(max(12px, env(safe-area-inset-top)) + 40px);
+          left: max(10px, env(safe-area-inset-left));
+          right: max(10px, env(safe-area-inset-right));
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        #hud-heading {
+          flex-wrap: nowrap;
+          gap: 6px;
+          max-width: none;
+        }
+        #hud-heading > span { margin-right: auto; }
+        .hud-button {
+          flex-basis: 54px;
+          width: 54px;
+          height: 26px;
+          padding: 0 5px;
+        }
+        #instructions-minimize {
+          flex-basis: 48px;
+          width: 48px;
+        }
+        #control-instructions {
+          max-width: none;
+          margin-top: 6px;
+          padding: 6px 8px;
+          border-left: 2px solid rgba(57, 255, 20, 0.55);
+          background: rgba(4, 8, 6, 0.8);
+        }
+        #combat-hud {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(112px, 1fr);
+          gap: 5px 9px;
+          width: 100%;
+          margin-top: 6px;
+          padding: 7px 9px;
+          box-sizing: border-box;
+          border: 1px solid rgba(183, 255, 171, 0.35);
+          border-radius: 4px;
+          background: rgba(4, 8, 6, 0.74);
+          backdrop-filter: blur(3px);
+        }
+        .hud-meter-label {
+          min-width: 0;
+          margin: 0;
+          gap: 5px;
+        }
+        .hud-meter-label + .hud-meter { margin: 0; }
+        #objective,
+        #lift-prompt { grid-column: 1 / -1; }
+        #objective {
+          margin-top: 1px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #lift-prompt { margin-top: 0; }
+        body.game-over-visible #hud,
+        body.game-over-visible #arcade-bar,
+        body.game-over-visible #mobile-controls { display: none; }
+      }
+      @media (orientation: landscape) and (max-height: 520px) {
+        #hud {
+          top: max(14px, env(safe-area-inset-top));
+          right: auto;
+          width: min(270px, calc(50vw - 115px));
+        }
+        #hud-heading > span { display: none; }
+        #combat-hud {
+          grid-template-columns: minmax(0, 1fr);
+          width: 100%;
+        }
+        #objective,
+        #lift-prompt { grid-column: 1; }
       }
       /* RFZAMP: a Winamp-2-style player drawn in CSS (no Nullsoft artwork), in
          the HUD's monochrome matrix green. Off, it rolls up to the windowshade
@@ -425,6 +503,7 @@
         --wa-dim-green: #0f3d12;
         --wa-line: rgba(57, 255, 20, 0.45);
         position: fixed;
+        z-index: 3;
         top: max(10px, env(safe-area-inset-top));
         right: max(16px, env(safe-area-inset-right));
         width: 288px;
@@ -701,8 +780,33 @@
          just above the thumb controls instead. */
       @media (max-width: 520px) {
         #radio {
-          bottom: calc(max(24px, env(safe-area-inset-bottom)) + 176px);
+          bottom: max(6px, env(safe-area-inset-bottom));
           max-width: calc(100vw - 32px);
+        }
+        #radio:not(.on) { width: 156px; }
+        #move-stick {
+          bottom: max(52px, calc(env(safe-area-inset-bottom) + 44px));
+        }
+        #punch-button {
+          bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
+        }
+        #jump-button {
+          bottom: max(144px, calc(env(safe-area-inset-bottom) + 136px));
+        }
+        #lift-button {
+          bottom: max(100px, calc(env(safe-area-inset-bottom) + 92px));
+        }
+        #radio.on ~ #mobile-controls #move-stick {
+          bottom: max(160px, calc(env(safe-area-inset-bottom) + 152px));
+        }
+        #radio.on ~ #mobile-controls #punch-button {
+          bottom: max(164px, calc(env(safe-area-inset-bottom) + 156px));
+        }
+        #radio.on ~ #mobile-controls #jump-button {
+          bottom: max(252px, calc(env(safe-area-inset-bottom) + 244px));
+        }
+        #radio.on ~ #mobile-controls #lift-button {
+          bottom: max(208px, calc(env(safe-area-inset-bottom) + 200px));
         }
       }
       #handle-gate {

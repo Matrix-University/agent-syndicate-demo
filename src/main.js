@@ -15,10 +15,12 @@ if (import.meta.env.DEV) window.__game = game;
 
 const INSTRUCTIONS_MINIMIZED_COOKIE = 'agent_instructions_minimized';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const savedInstructionsState = readCookie(INSTRUCTIONS_MINIMIZED_COOKIE);
 
 let showingTouchInstructions = false;
 let instructionsOverridden = false;
-let instructionsMinimized = readCookie(INSTRUCTIONS_MINIMIZED_COOKIE) === '1';
+let instructionsMinimized = matchMedia('(max-width: 700px)').matches
+	|| savedInstructionsState === '1';
 
 function readCookie(name) {
 	const prefix = `${name}=`;

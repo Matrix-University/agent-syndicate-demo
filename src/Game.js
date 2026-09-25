@@ -407,6 +407,7 @@ export class Game {
 
   _restart() {
     this.gameOver = false;
+    document.body.classList.remove('game-over-visible');
     this._downTime = 0;
     this.sessionTime = 0;
     this._pendingEntry = null;
@@ -439,6 +440,7 @@ export class Game {
     }
     if (this._downTime >= DEATH_REVEAL_DELAY && this.gameOverPanel.hidden) {
       this.gameOverPanel.hidden = false;
+      document.body.classList.add('game-over-visible');
       if (this._pendingEntry) this._promptForEntryName();
     }
   }
