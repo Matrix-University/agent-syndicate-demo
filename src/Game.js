@@ -14,6 +14,8 @@ import {
 import { HandleDialog } from './HandleDialog.js';
 import { RemoteScores } from './RemoteScores.js';
 import { Radio } from './Radio.js';
+import { PauseMenu } from './PauseMenu.js';
+import { Settings } from './Settings.js';
 
 const PLAYER_SPAWN = new THREE.Vector3(-27.5, 0, 51);
 const PLAYER_SPAWN_YAW = Math.PI;
@@ -72,6 +74,8 @@ export class Game {
     this.playerHealthFill = document.getElementById('player-health-fill');
     this.playerHealthValue = document.getElementById('player-health-value');
     this.objective = document.getElementById('objective');
+    this.objectiveText = document.getElementById('objective-text');
+    this.objectiveProgress = document.getElementById('objective-progress');
     this.runHandle = document.getElementById('run-handle');
     this.arcadeBar = document.getElementById('arcade-bar');
     this.arcadeRun = document.getElementById('arcade-run');
@@ -85,6 +89,11 @@ export class Game {
     this.gameOverRecord = document.getElementById('game-over-record');
     this.gameOverBoardLabel = document.getElementById('game-over-best');
     this.highScoreTable = document.getElementById('high-score-table');
+    this.gameOverBoardToggle = document.getElementById('game-over-board');
+    // Both boards from the last run, so the panel can flip between them; the
+    // global one only exists once the submission has answered.
+    this._boards = { local: null, global: null };
+    this._boardShown = 'local';
     this.gameOver = false;
     this._downTime = 0;
     this._lastFlash = 0;
@@ -117,7 +126,9 @@ export class Game {
       jumpButton: document.getElementById('jump-button'),
       punchButton: document.getElementById('punch-button'),
       liftButton: document.getElementById('lift-button'),
+      lookHint: document.getElementById('look-hint'),
     });
+    this.settings = new Settings();
     this.clock = new THREE.Clock();
     this._idleInput = {
       moveX: 0,
@@ -127,8 +138,12 @@ export class Game {
       punchPressed: false,
       liftPressed: false,
     };
-    this.radio = new Radio({ root: document.getElementById('radio') });
+    this.radio = new Radio({
+      root: document.getElementById('radio'),
+      shoutButton: document.getElementById('radio-shout'),
+    });
     this._liftPromptText = '';
+    this._shownCarrying = false;
     this._disposed = false;
 
     this.handleDialog = new HandleDialog({
@@ -146,6 +161,50 @@ export class Game {
     this._onHandleEdit = () => this.promptForHandle({ skipLabel: 'CANCEL' });
     this.handleEditButton = document.getElementById('handle-edit');
     this.handleEditButton.addEventListener('click', this._onHandleEdit);
+
+    // Pausing freezes the run the same way the handle prompt does; the sheet
+    // itself only shows and hides.
+    this.pauseMenu = new PauseMenu({
+      root: document.getElementById('pause-menu'),
+      resumeButton: document.getElementById('pause-resume'),
+      restartButton: document.getElementById('pause-restart'),
+      handleEditButton: document.getElementById('pause-handle-edit'),
+      handleLabel: document.getElementById('pause-handle'),
+      sessionLabel: document.getElementById('pause-session'),
+      radioSlot: document.getElementById('pause-radio'),
+      radioRoot: document.getElementById('radio'),
+      touchLegend: document.getElementById('pause-legend-touch'),
+      keysLegend: document.getElementById('pause-legend-keys'),
+      leftHandedRow: document.getElementById('pause-left-row'),
+      leftHandedInput: document.getElementById('pause-left-handed'),
+      hapticsRow: document.getElementById('pause-haptics-row'),
+      hapticsInput: document.getElementById('pause-haptics'),
+      settings: this.settings,
+      onResume: () => this.resume(),
+      onRestart: () => {
+        this.resume();
+        this._restart();
+      },
+      onEditHandle: this._onHandleEdit,
+    });
+    this.pauseButton = document.getElementById('pause-button');
+    this._onPauseClick = () => this.pause();
+    this.pauseButton.addEventListener('click', this._onPauseClick);
+    // A phone call or app switch shouldn't cost the run.
+    this._onVisibilityChange = () => {
+      if (document.hidden) this.pause();
+    };
+    document.addEventListener('visibilitychange', this._onVisibilityChange);
+
+    this._onRetryClick = () => {
+      if (this.gameOver && !this.gameOverPanel.hidden) this._restart();
+    };
+    this._onBoardToggle = () => this._showBoard(this._boardShown === 'global' ? 'local' : 'global');
+    this.gameOverRetry = document.getElementById('game-over-retry');
+    this.gameOverEdit = document.getElementById('game-over-edit');
+    this.gameOverRetry.addEventListener('click', this._onRetryClick);
+    this.gameOverEdit.addEventListener('click', this._onHandleEdit);
+    this.gameOverBoardToggle.addEventListener('click', this._onBoardToggle);
 
     this._loop = this._loop.bind(this);
     this._onResize = this._onResize.bind(this);
@@ -166,9 +225,10 @@ export class Game {
   _loop() {
     // Clamp dt so a paused/backgrounded tab doesn't teleport the player.
     const dt = Math.min(this.clock.getDelta(), 0.05);
-    // The handle prompt freezes the run — it owns the keyboard, and someone
-    // typing a name shouldn't be taking hits.
-    if (this.handleDialog.isOpen) {
+    // The handle prompt and the pause sheet freeze the run — someone typing a
+    // name or changing the radio shouldn't be taking hits.
+    if (this.input.pausePressed) this.pause();
+    if (this.handleDialog.isOpen || this.pauseMenu.isOpen) {
       this.renderer.render(this.scene, this.camera);
       this.input.endFrame();
       return;
@@ -201,6 +261,7 @@ export class Game {
         preferredEnemy
       );
       if (result.hitEnemy) {
+        this.settings.vibrate(15);
         this._focusEnemy = result.hitEnemy;
         if (result.hitEnemy.health === 1 && !result.hitEnemy.spawnedOnLastHit) {
           result.hitEnemy.spawnedOnLastHit = true;
@@ -209,12 +270,16 @@ export class Game {
         this._updateEnemyHud();
       }
       if (result.defeatedEnemy) this.greenCodeBurst.play(result.hitEnemy.root.position);
-      if (result.playerHit) this._updatePlayerHud();
+      if (result.playerHit) {
+        this.settings.vibrate(60);
+        this._updatePlayerHud();
+      }
 
       const flattened = this.combat.resolveThrownProp(
         this.liftableCar, this.enemyManager.enemies
       );
       if (flattened.length) {
+        this.settings.vibrate([40, 30, 40]);
         this.greenCodeBurst.play(flattened[flattened.length - 1].root.position);
         this._updateEnemyHud();
       }
@@ -246,15 +311,22 @@ export class Game {
       `${this.enemyManager.aliveCount} ACTIVE / ${this.enemyManager.defeated} DOWN`;
     this.enemyHealthMeter.setAttribute('aria-valuenow', String(health));
     this.enemyHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
-    this.objective.textContent = this.enemyManager.defeated >= CAR_OBJECTIVE_UNLOCK_KILLS
-      ? 'OBJECTIVE // THROW CAR TO DESTROY AGENTS AND ESCAPE THE GARAGE'
-      : 'OBJECTIVE // DEFEND YOURSELF';
+    const defeated = this.enemyManager.defeated;
+    const unlocked = defeated >= CAR_OBJECTIVE_UNLOCK_KILLS;
+    this.objectiveText.textContent = unlocked
+      ? 'THROW CAR TO DESTROY AGENTS AND ESCAPE THE GARAGE'
+      : 'DEFEND YOURSELF';
+    this.objectiveProgress.textContent = unlocked ? '' : `${defeated}/${CAR_OBJECTIVE_UNLOCK_KILLS}`;
+    // The class arrives once when the goal changes, which plays its one-shot
+    // flash; a restart takes it away for the next unlock.
+    this.objective.classList.toggle('fresh', unlocked);
   }
 
   _updatePlayerHud() {
     const { health, maxHealth } = this.player;
     this.playerHealthFill.style.transform = `scaleX(${health / maxHealth})`;
     this.playerHealthValue.textContent = `${health} / ${maxHealth}`;
+    this.playerHealthMeter.classList.toggle('low', health <= 3);
     this.playerHealthMeter.setAttribute('aria-valuenow', String(health));
     this.playerHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
   }
@@ -265,6 +337,7 @@ export class Game {
     // Also the game-over headline, which the post-run name prompt sits over.
     this.gameOverHandle.textContent = handle;
     this.playerHealthMeter.setAttribute('aria-label', `${handle} health`);
+    this.pauseMenu?.setHandle(handle);
   }
 
   // The cabinet readout: this run beside the score to beat. Rewrites only when
@@ -315,6 +388,23 @@ export class Game {
     this.highScoreTable.innerHTML = rows.join('');
   }
 
+  /** Files a board from this run and shows it. */
+  _setBoard(kind, scores, currentIndex, rank) {
+    this._boards[kind] = { scores, currentIndex, rank };
+    this._showBoard(kind);
+  }
+
+  _showBoard(kind) {
+    const board = this._boards[kind];
+    if (!board) return;
+    this._boardShown = kind;
+    this._showRank(board.rank);
+    this._renderBoard(board.scores, board.currentIndex, kind === 'global');
+    // The toggle only means something once there are two boards to flip between.
+    this.gameOverBoardToggle.hidden = !this._boards.global;
+    this.gameOverBoardToggle.textContent = kind === 'global' ? 'LOCAL BOARD' : 'GLOBAL BOARD';
+  }
+
   _showRank(rank) {
     this.gameOverRecord.hidden = rank === 0;
     this.gameOverRecord.textContent =
@@ -327,8 +417,29 @@ export class Game {
     try {
       return await this.handleDialog.open(options);
     } finally {
-      this.input.setSuspended(false);
+      // Opened from the pause sheet, the run stays frozen behind it.
+      this.input.setSuspended(this.pauseMenu.isOpen);
     }
+  }
+
+  /** Opens the pause sheet over a frozen run. */
+  pause() {
+    if (this.gameOver || this.handleDialog.isOpen || this.pauseMenu.isOpen) return;
+    this.mobileControls.reset();
+    this.input.setSuspended(true);
+    document.exitPointerLock?.();
+    this.pauseMenu.open({
+      handle: this.profile.handle || 'UNSET',
+      sessionTime: this.sessionTime,
+    });
+    this.pauseButton.setAttribute('aria-expanded', 'true');
+  }
+
+  resume() {
+    if (!this.pauseMenu.isOpen) return;
+    this.pauseMenu.close();
+    this.input.setSuspended(false);
+    this.pauseButton.setAttribute('aria-expanded', 'false');
   }
 
   /** Boot-time ask: first-time players name themselves before the first run. */
@@ -349,6 +460,11 @@ export class Game {
       this.liftPrompt.hidden = !text;
       this.mobileControls.setLiftState(!!text, this.player.carrying ? 'THROW' : 'LIFT');
     }
+    const carrying = !this.gameOver && this.player.carrying;
+    if (carrying !== this._shownCarrying) {
+      this._shownCarrying = carrying;
+      this.mobileControls.setCarryState(carrying);
+    }
   }
 
   _endGame() {
@@ -360,13 +476,12 @@ export class Game {
     this._sessionId += 1;
     this._sessionRun = count > 0 ? { kills: count, seconds } : null;
 
-    this.gameOverScore.textContent =
-      `${count} ${count === 1 ? 'AGENT' : 'AGENTS'} NEUTRALIZED`;
-    this.gameOverSession.textContent = `SESSION ${formatDuration(this.sessionTime)}`;
-    this._showRank(rank);
+    this.gameOverScore.textContent = String(count);
+    this.gameOverSession.textContent = formatDuration(this.sessionTime);
     // The local board goes up immediately; the shared one replaces it when the
     // submission answers, so there is always a board on screen.
-    this._renderBoard(this.profile.scores, rank - 1, false);
+    this._boards.global = null;
+    this._setBoard('local', this.profile.scores, rank - 1, rank);
 
     // A row with nobody's name on it gets one the way a cabinet asks: once the
     // board is actually on screen (_updateDeathFade reveals it). The run is
@@ -384,7 +499,8 @@ export class Game {
       skipLabel: 'ANON',
     });
     if (handle) this.profile.nameEntry(entry, handle);
-    this._renderBoard(this.profile.scores, this.profile.scores.indexOf(entry), false);
+    const index = this.profile.scores.indexOf(entry);
+    this._setBoard('local', this.profile.scores, index, index + 1);
     this._submitSession();
   }
 
@@ -401,8 +517,7 @@ export class Game {
     const result = await this.remoteScores.submit({ ...run, handle: this.profile.handle });
     if (!result || sessionId !== this._sessionId) return;
 
-    this._showRank(result.rank);
-    this._renderBoard(result.scores, result.rank - 1, true);
+    this._setBoard('global', result.scores, result.rank - 1, result.rank);
   }
 
   _restart() {
@@ -461,6 +576,12 @@ export class Game {
       window.removeEventListener('resize', this._onResize);
       window.visualViewport?.removeEventListener('resize', this._onResize);
       this.handleEditButton.removeEventListener('click', this._onHandleEdit);
+      this.pauseButton.removeEventListener('click', this._onPauseClick);
+      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      this.gameOverRetry.removeEventListener('click', this._onRetryClick);
+      this.gameOverEdit.removeEventListener('click', this._onHandleEdit);
+      this.gameOverBoardToggle.removeEventListener('click', this._onBoardToggle);
+      this.pauseMenu.dispose();
       this.handleDialog.dispose();
       this.radio.dispose();
       this.mobileControls.dispose();

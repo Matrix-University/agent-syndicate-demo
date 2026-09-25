@@ -12,6 +12,21 @@
         --matrix-green: #39ff14;
         --control-edge: rgba(183, 255, 171, 0.72);
         --control-fill: rgba(8, 16, 12, 0.7);
+        --stick-x: 24px;
+        --stick-y: 24px;
+        --stick-size: 132px;
+        --hit-x: 22px;
+        --hit-y: 28px;
+        --hit-size: 76px;
+        --jump-x: 22px;
+        --jump-y: 116px;
+        --jump-size: 76px;
+        --lift-x: 106px;
+        --lift-y: 72px;
+        --lift-size: 76px;
+        --panel-fill: rgba(3, 8, 5, 0.82);
+        --panel-edge: rgba(57, 255, 20, 0.35);
+        --caption: #8fcf89;
       }
       html, body {
         margin: 0; height: 100%; overflow: hidden; background: #0a0a0f;
@@ -62,6 +77,8 @@
         flex-basis: 60px;
         width: 60px;
       }
+      #pause-button svg { display: none; }
+      .hud-cap { display: none; }
       #control-instructions {
         box-sizing: border-box;
         max-width: min(300px, 100%);
@@ -104,6 +121,18 @@
         margin-top: 5px;
         color: var(--matrix-green);
       }
+      #objective::before { content: "OBJECTIVE // "; }
+      #objective-progress { color: #d7ffd0; }
+      #objective-progress:empty { display: none; }
+      /* One flash when the goal switches to the car, so it reads at a glance. */
+      #objective.fresh { animation: objective-fresh 0.6s steps(2, end) 3; }
+      @keyframes objective-fresh {
+        50% { background-color: rgba(57, 255, 20, 0.35); }
+      }
+      .hud-meter.low .hud-meter-fill {
+        background: #ff7a45;
+        box-shadow: 0 0 9px rgba(255, 122, 69, 0.65);
+      }
       #arcade-bar {
         position: fixed;
         z-index: 3;
@@ -119,6 +148,7 @@
         color: var(--matrix-green);
         text-align: center;
         text-shadow: 0 0 8px rgba(57, 255, 20, 0.6);
+        line-height: 1.2;
         pointer-events: none;
         user-select: none;
         white-space: nowrap;
@@ -223,7 +253,9 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: safe center;
+        overflow-y: auto;
+        background: rgba(2, 4, 3, 0.62);
         gap: 12px;
         box-sizing: border-box;
         padding: 16px;
@@ -235,6 +267,9 @@
         user-select: none;
       }
       #game-over[hidden] { display: none; }
+      /* The panel reports the run itself, so the live readouts step aside. */
+      body.game-over-visible #arcade-bar,
+      body.game-over-visible #look-hint { display: none; }
       #game-over-title {
         margin: 0;
         font-size: 3rem;
@@ -253,17 +288,70 @@
         overflow-wrap: anywhere;
       }
       #game-over-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        width: min(370px, 100%);
+      }
+      .game-over-stat {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        padding: 8px 18px;
+        align-items: center;
+        gap: 2px;
+        padding: 8px 10px;
         border: 1px solid var(--matrix-green);
-        border-radius: 4px;
+        border-radius: 8px;
         background: rgba(4, 8, 6, 0.78);
         box-shadow: 0 0 12px rgba(57, 255, 20, 0.25), inset 0 0 10px rgba(57, 255, 20, 0.1);
       }
-      #game-over-score { font-size: 1rem; }
-      #game-over-session { color: #d7ffd0; font-size: 0.875rem; }
+      .game-over-cap {
+        color: var(--caption);
+        font-size: 0.6875rem;
+        letter-spacing: 2px;
+        text-shadow: none;
+      }
+      #game-over-score,
+      #game-over-session {
+        color: #efffec;
+        font: 400 2.5rem/1 "VT323", ui-monospace, monospace;
+      }
+      #game-over-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: min(370px, 100%);
+        margin-top: 4px;
+        pointer-events: auto;
+      }
+      #game-over-secondary { display: flex; gap: 10px; }
+      #game-over-retry,
+      .game-over-secondary {
+        border-radius: 10px;
+        font: 700 16px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+        letter-spacing: 2px;
+        text-shadow: none;
+        cursor: pointer;
+      }
+      #game-over-retry {
+        height: 56px;
+        border: 0;
+        background: var(--matrix-green);
+        color: #041006;
+        font-size: 22px;
+        letter-spacing: 4px;
+      }
+      .game-over-secondary {
+        flex: 1;
+        height: 48px;
+        border: 1px solid rgba(57, 255, 20, 0.55);
+        background: rgba(4, 8, 6, 0.78);
+        color: #b7ffab;
+      }
+      #game-over-retry:focus-visible,
+      .game-over-secondary:focus-visible {
+        outline: 2px solid #efffec;
+        outline-offset: 2px;
+      }
       #game-over-best {
         margin-top: 4px;
         font-size: 0.75rem;
@@ -277,6 +365,10 @@
       }
       #game-over-record[hidden] { display: none; }
       #game-over-hint { color: #d7ffd0; font-size: 0.8125rem; opacity: 0.85; }
+      body.touch-controls #game-over-hint { display: none; }
+      @media (any-pointer: coarse) {
+        #game-over-hint { display: none; }
+      }
       .touch-help { display: none; }
       #mobile-controls {
         display: none;
@@ -290,10 +382,10 @@
       }
       #move-stick {
         position: absolute;
-        left: max(24px, calc(env(safe-area-inset-left) + 16px));
-        bottom: max(24px, calc(env(safe-area-inset-bottom) + 16px));
-        width: 132px;
-        height: 132px;
+        left: calc(env(safe-area-inset-left) + var(--stick-x));
+        bottom: max(var(--stick-y), calc(env(safe-area-inset-bottom) + var(--stick-y) - 12px));
+        width: var(--stick-size);
+        height: var(--stick-size);
         box-sizing: border-box;
         border: 2px solid var(--control-edge);
         border-radius: 50%;
@@ -301,7 +393,11 @@
         box-shadow: inset 0 0 22px rgba(57, 255, 20, 0.12), 0 0 18px rgba(0, 0, 0, 0.38);
         pointer-events: auto;
         touch-action: none;
+        /* The dashed ring is the sprint zone: push the thumb out to it to run. */
+        outline: 2px dashed rgba(57, 255, 20, 0.32);
+        outline-offset: 8px;
       }
+      #move-stick.sprinting { outline: 2px solid var(--matrix-green); }
       #move-stick::before {
         content: "";
         position: absolute;
@@ -326,8 +422,6 @@
       #move-stick.active { border-color: var(--matrix-green); }
       .action-button {
         position: absolute;
-        width: 76px;
-        height: 76px;
         padding: 0;
         border: 2px solid var(--control-edge);
         border-radius: 50%;
@@ -345,18 +439,73 @@
         box-shadow: 0 0 18px rgba(57, 255, 20, 0.42);
       }
       #punch-button {
-        right: max(22px, calc(env(safe-area-inset-right) + 14px));
-        bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px));
+        right: calc(env(safe-area-inset-right) + var(--hit-x));
+        bottom: max(var(--hit-y), calc(env(safe-area-inset-bottom) + var(--hit-y) - 12px));
+        width: var(--hit-size);
+        height: var(--hit-size);
+        border-color: var(--matrix-green);
+        background: rgba(35, 103, 43, 0.62);
+        font-size: 20px;
       }
       #jump-button {
-        right: max(22px, calc(env(safe-area-inset-right) + 14px));
-        bottom: max(116px, calc(env(safe-area-inset-bottom) + 108px));
+        right: calc(env(safe-area-inset-right) + var(--jump-x));
+        bottom: max(var(--jump-y), calc(env(safe-area-inset-bottom) + var(--jump-y) - 12px));
+        width: var(--jump-size);
+        height: var(--jump-size);
       }
       #lift-button {
-        right: max(106px, calc(env(safe-area-inset-right) + 98px));
-        bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px));
+        right: calc(env(safe-area-inset-right) + var(--lift-x));
+        bottom: max(var(--lift-y), calc(env(safe-area-inset-bottom) + var(--lift-y) - 12px));
+        width: var(--lift-size);
+        height: var(--lift-size);
       }
+      #lift-button:not(.unavailable) {
+        border-color: var(--matrix-green);
+        color: var(--matrix-green);
+        box-shadow: 0 0 0 5px rgba(57, 255, 20, 0.18);
+      }
+      /* Car overhead: the attack button is the throw, and says so. */
+      #punch-button.throw {
+        background: var(--matrix-green);
+        color: #041006;
+        box-shadow: 0 0 0 8px rgba(57, 255, 20, 0.2);
+      }
+      #lift-button.carrying { display: none; }
       .action-button.unavailable { opacity: 0.35; }
+      body.left-handed #move-stick {
+        left: auto;
+        right: calc(env(safe-area-inset-right) + var(--stick-x));
+      }
+      body.left-handed #punch-button {
+        right: auto;
+        left: calc(env(safe-area-inset-left) + var(--hit-x));
+      }
+      body.left-handed #jump-button {
+        right: auto;
+        left: calc(env(safe-area-inset-left) + var(--jump-x));
+      }
+      body.left-handed #lift-button {
+        right: auto;
+        left: calc(env(safe-area-inset-left) + var(--lift-x));
+      }
+      #look-hint {
+        position: absolute;
+        left: 50%;
+        top: 56%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border: 1px dashed rgba(183, 255, 171, 0.4);
+        border-radius: 999px;
+        background: rgba(3, 8, 5, 0.7);
+        color: #d7ffd0;
+        font: 500 14px/1.2 "Arial Narrow", "Roboto Condensed", sans-serif;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      #look-hint[hidden] { display: none; }
       @media (any-pointer: coarse) {
         #mobile-controls { display: block; }
         .desktop-help { display: none; }
@@ -369,18 +518,6 @@
       body.instructions-desktop .touch-help { display: none; }
       body.instructions-touch .desktop-help { display: none; }
       body.instructions-touch .touch-help { display: inline; }
-      @media (orientation: landscape) and (max-height: 520px) {
-        #hud { font-size: 11px; line-height: 1.45; }
-        #move-stick { width: 116px; height: 116px; }
-        .action-button { width: 68px; height: 68px; }
-        #jump-button {
-          bottom: max(108px, calc(env(safe-area-inset-bottom) + 100px));
-        }
-        #lift-button {
-          right: max(96px, calc(env(safe-area-inset-right) + 88px));
-          bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px));
-        }
-      }
       @media (max-width: 420px) {
         #game-over-title { font-size: 2rem; }
       }
@@ -390,8 +527,13 @@
         #game-over { gap: 6px; }
         #game-over-title { font-size: 1.75rem; }
         #game-over-handle { font-size: 2.125rem; }
-        #game-over-stats { padding: 5px 12px; gap: 2px; }
-        #game-over-score { font-size: 0.875rem; }
+        .game-over-stat { padding: 4px 10px; }
+        #game-over-score,
+        #game-over-session { font-size: 1.75rem; }
+        #game-over-actions { flex-direction: row; gap: 8px; }
+        #game-over-retry { flex: 1.4; height: 44px; font-size: 18px; }
+        #game-over-secondary { flex: 2; }
+        .game-over-secondary { height: 44px; font-size: 13px; letter-spacing: 1px; }
         #high-score-table {
           padding: 6px 10px;
           font-size: 0.6875rem;
@@ -407,88 +549,278 @@
         #radio.on:not(.playing) #radio-power,
         #radio:not(.playing) #radio-time,
         #radio.playing #radio-vis i::after,
-        #radio.on #radio-ticker.scrolling { animation: none; }
+        #radio.on #radio-ticker.scrolling,
+        #radio-shout,
+        #objective.fresh { animation: none; }
       }
-      /* Narrow screens: give the arcade bar the top row to itself so it can't
-         land on the HUD heading. */
+      /* Phones. The HUD becomes one panel — handle, run, best and pause on
+         the first row, health under it — with the objective as a chip below
+         and the radio folded into a megaphone. Keys help lives in the pause
+         sheet. The grid reaches into the HUD's sub-blocks with display:
+         contents, so desktop keeps its DOM and its look. */
       @media (max-width: 700px) {
-        #arcade-bar { gap: 22px; }
-        .arcade-value { font-size: 13px; }
+        :root {
+          --stick-x: 18px;
+          --stick-y: 48px;
+          --hit-x: 20px;
+          --hit-y: 48px;
+          --hit-size: 96px;
+          --jump-x: 34px;
+          --jump-y: 164px;
+          --jump-size: 68px;
+          --lift-x: 132px;
+          --lift-y: 62px;
+          --lift-size: 68px;
+        }
+        #move-stick::after {
+          content: "MOVE · EDGE = SPRINT";
+          position: absolute;
+          left: 50%;
+          top: calc(100% + 14px);
+          transform: translateX(-50%);
+          color: var(--caption);
+          font: 600 11px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+          letter-spacing: 1.5px;
+          white-space: nowrap;
+        }
+      }
+      @media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
         #hud {
-          top: calc(max(12px, env(safe-area-inset-top)) + 40px);
-          left: max(10px, env(safe-area-inset-left));
-          right: max(10px, env(safe-area-inset-right));
-          font-size: 11px;
-          line-height: 1.35;
-        }
-        #hud-heading {
-          flex-wrap: nowrap;
-          gap: 6px;
-          max-width: none;
-        }
-        #hud-heading > span { margin-right: auto; }
-        .hud-button {
-          flex-basis: 54px;
-          width: 54px;
-          height: 26px;
-          padding: 0 5px;
-        }
-        #instructions-minimize {
-          flex-basis: 48px;
-          width: 48px;
-        }
-        #control-instructions {
-          max-width: none;
-          margin-top: 6px;
-          padding: 6px 8px;
-          border-left: 2px solid rgba(57, 255, 20, 0.55);
-          background: rgba(4, 8, 6, 0.8);
-        }
-        #combat-hud {
+          top: max(12px, env(safe-area-inset-top));
+          left: max(12px, env(safe-area-inset-left));
+          right: max(12px, env(safe-area-inset-right));
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(112px, 1fr);
-          gap: 5px 9px;
-          width: 100%;
-          margin-top: 6px;
-          padding: 7px 9px;
-          box-sizing: border-box;
-          border: 1px solid rgba(183, 255, 171, 0.35);
-          border-radius: 4px;
-          background: rgba(4, 8, 6, 0.74);
-          backdrop-filter: blur(3px);
+          grid-template-columns: minmax(0, max-content) minmax(0, 1fr) 44px;
+          grid-template-rows: 44px 12px auto;
+          gap: 8px 14px;
+          padding: 8px 8px 0 12px;
+          font-family: "Arial Narrow", "Roboto Condensed", sans-serif;
+          color: #d7ffd0;
+          font-size: 11px;
+          line-height: 1.2;
+          text-shadow: none;
         }
-        .hud-meter-label {
+        #hud::before {
+          content: "";
+          grid-row: 1 / 3;
+          grid-column: 1 / -1;
+          z-index: -1;
+          margin: -8px -8px -10px -12px;
+          border: 1px solid var(--panel-edge);
+          border-radius: 8px;
+          background: var(--panel-fill);
+        }
+        #hud-heading,
+        #combat-hud,
+        #combat-hud > .hud-meter-label:first-child { display: contents; }
+        #hud-title,
+        #instructions-toggle,
+        #instructions-minimize,
+        #control-instructions,
+        #handle-edit,
+        .enemy-meter,
+        #lift-prompt { display: none !important; }
+        .hud-cap {
+          display: block;
+          color: var(--caption);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 1.5px;
+        }
+        #player-handle {
+          grid-row: 1;
+          grid-column: 1;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 1px;
           min-width: 0;
-          margin: 0;
-          gap: 5px;
         }
-        .hud-meter-label + .hud-meter { margin: 0; }
-        #objective,
-        #lift-prompt { grid-column: 1 / -1; }
-        #objective {
-          margin-top: 1px;
+        #run-handle,
+        #player-health-value,
+        .arcade-value { font: 400 22px/0.9 "VT323", ui-monospace, monospace; }
+        #run-handle {
+          max-width: 100%;
           overflow: hidden;
+          color: #efffec;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        #lift-prompt { margin-top: 0; }
+        #arcade-bar {
+          position: static;
+          grid-row: 1;
+          grid-column: 2;
+          align-self: center;
+          justify-self: start;
+          transform: none;
+          gap: 14px;
+          padding: 0;
+          background: none;
+          text-align: left;
+          text-shadow: none;
+        }
+        .arcade-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--caption); }
+        #arcade-1up { color: var(--matrix-green); }
+        #arcade-high { color: #b7ffab; }
+        #pause-button {
+          grid-row: 1;
+          grid-column: 3;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          padding: 0;
+          border-color: rgba(57, 255, 20, 0.55);
+          border-radius: 8px;
+          background: rgba(57, 255, 20, 0.08);
+          color: #b7ffab;
+        }
+        #pause-button svg { display: block; }
+        #pause-button .pause-label { display: none; }
+        #player-health-meter {
+          grid-row: 2;
+          grid-column: 1 / 3;
+          align-self: center;
+          height: 10px;
+          border: 0;
+          border-radius: 2px;
+          background: #12301a;
+          position: relative;
+        }
+        /* Nine health, nine blocks: gaps cut into the bar every ninth. */
+        #player-health-meter::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: repeating-linear-gradient(to right,
+            transparent 0 calc(100% / 9 - 3px), #040a06 calc(100% / 9 - 3px) calc(100% / 9));
+        }
+        #player-health-meter .hud-meter-fill { box-shadow: none; }
+        #player-health-value {
+          grid-row: 2;
+          grid-column: 3;
+          align-self: center;
+          color: #efffec;
+          font-size: 18px;
+          text-align: right;
+          white-space: nowrap;
+        }
+        #objective {
+          grid-row: 3;
+          grid-column: 1 / 3;
+          justify-self: start;
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          max-width: calc(100% + 12px);
+          margin: 18px 0 0 -12px;
+          padding: 6px 12px 6px 8px;
+          box-sizing: border-box;
+          border: 1px solid rgba(57, 255, 20, 0.3);
+          border-radius: 16px;
+          background: var(--panel-fill);
+          color: #efffec;
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          line-height: 1.25;
+        }
+        #objective::before {
+          content: "OBJ";
+          flex: 0 0 auto;
+          margin-top: 1px;
+          padding: 2px 6px;
+          border-radius: 999px;
+          background: var(--matrix-green);
+          color: #041006;
+          font-size: 10px;
+          letter-spacing: 1.5px;
+        }
+        #objective-progress {
+          flex: 0 0 auto;
+          color: var(--caption);
+          font: 400 18px/1 "VT323", ui-monospace, monospace;
+        }
+        #radio { display: none; }
+        /* body-qualified: the base rules for these come later in the sheet. */
+        body #radio-shout {
+          display: flex;
+          top: calc(max(12px, env(safe-area-inset-top)) + 88px);
+        }
         body.game-over-visible #hud,
-        body.game-over-visible #arcade-bar,
+        body.game-over-visible #radio-shout,
         body.game-over-visible #mobile-controls { display: none; }
+        /* The panel has the whole screen here, so give it a ground to read on. */
+        #game-over { background: rgba(2, 4, 3, 0.86); }
       }
+      /* Landscape phones: the panel shrinks to the handle and health at the
+         top left, the run readout and objective take the top centre, and pause
+         and the megaphone sit top right, clear of both thumbs. */
       @media (orientation: landscape) and (max-height: 520px) {
+        :root {
+          --stick-x: 44px;
+          --stick-y: 22px;
+          --stick-size: 116px;
+          --hit-x: 44px;
+          --hit-y: 24px;
+          --hit-size: 84px;
+          --jump-x: 54px;
+          --jump-y: 124px;
+          --jump-size: 64px;
+          --lift-x: 144px;
+          --lift-y: 34px;
+          --lift-size: 64px;
+        }
+        #move-stick::after { content: none; }
         #hud {
-          top: max(14px, env(safe-area-inset-top));
           right: auto;
-          width: min(270px, calc(50vw - 115px));
+          width: 230px;
+          grid-template-columns: minmax(0, 1fr) 44px;
+          grid-template-rows: 26px 10px;
+          padding-top: 8px;
         }
-        #hud-heading > span { display: none; }
-        #combat-hud {
-          grid-template-columns: minmax(0, 1fr);
-          width: 100%;
+        #player-handle { flex-direction: row; align-items: center; justify-content: flex-start; }
+        .hud-cap { display: none; }
+        #player-health-value { grid-row: 1; grid-column: 2; }
+        #player-health-meter { grid-row: 2; grid-column: 1 / -1; height: 8px; }
+        #arcade-bar,
+        #objective {
+          position: fixed;
+          left: 50%;
+          transform: translateX(-50%);
         }
-        #objective,
-        #lift-prompt { grid-column: 1; }
+        #arcade-bar {
+          top: max(10px, env(safe-area-inset-top));
+          gap: 22px;
+          padding: 4px 14px;
+          border: 1px solid rgba(57, 255, 20, 0.3);
+          border-radius: 8px;
+          background: var(--panel-fill);
+          text-align: center;
+        }
+        .arcade-col { align-items: center; }
+        .arcade-label { font-size: 10px; }
+        .arcade-value { font-size: 20px; }
+        #objective {
+          top: calc(max(10px, env(safe-area-inset-top)) + 52px);
+          max-width: 42vw;
+          margin: 0;
+          padding: 4px 12px 4px 6px;
+          font-size: 14px;
+          white-space: nowrap;
+        }
+        #objective-text { overflow: hidden; text-overflow: ellipsis; }
+        #pause-button {
+          position: fixed;
+          top: max(12px, env(safe-area-inset-top));
+          right: max(12px, env(safe-area-inset-right));
+          background: var(--panel-fill);
+        }
+        body #radio-shout {
+          top: max(12px, env(safe-area-inset-top));
+          right: calc(max(12px, env(safe-area-inset-right)) + 52px);
+        }
       }
       /* RFZAMP: a Winamp-2-style player drawn in CSS (no Nullsoft artwork), in
          the HUD's monochrome matrix green. Off, it rolls up to the windowshade
@@ -776,37 +1108,238 @@
           transform: translateX(-50%);
         }
       }
-      /* ...and on a portrait phone there is no room between them, so it rides
-         just above the thumb controls instead. */
-      @media (max-width: 520px) {
-        #radio {
-          bottom: max(6px, env(safe-area-inset-bottom));
-          max-width: calc(100vw - 32px);
+      /* Compact layouts show RFZAMP as a megaphone lit by the stream's status:
+         dim while off, pulsing while it tunes in, green on air, amber when the
+         stream is blocked or down. Tapping it switches the radio on and off. */
+      #radio-shout {
+        display: none;
+        position: fixed;
+        z-index: 3;
+        right: max(12px, env(safe-area-inset-right));
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(143, 168, 140, 0.45);
+        border-radius: 50%;
+        background: var(--panel-fill);
+        color: #6f8a6c;
+        cursor: pointer;
+      }
+      #radio-shout[data-status="connecting"],
+      #radio-shout[data-status="buffering"] {
+        border-color: rgba(57, 255, 20, 0.55);
+        color: var(--matrix-green);
+        animation: radio-tuning 0.9s ease-in-out infinite alternate;
+      }
+      #radio-shout[data-status="live"] {
+        border-color: var(--matrix-green);
+        background: rgba(20, 60, 24, 0.9);
+        color: var(--matrix-green);
+        box-shadow: 0 0 12px rgba(57, 255, 20, 0.45);
+      }
+      #radio-shout[data-status="live"].muted { color: var(--caption); box-shadow: none; }
+      #radio-shout[data-status="blocked"],
+      #radio-shout[data-status="offline"] {
+        border-color: rgba(255, 122, 69, 0.6);
+        color: #ffa27a;
+      }
+      #radio-shout:focus-visible {
+        outline: 2px solid var(--matrix-green);
+        outline-offset: 2px;
+      }
+      /* In the pause sheet the real player opens fully, at thumb size. */
+      #pause-radio #radio {
+        display: block;
+        position: static;
+        width: auto;
+        max-width: none;
+        transform: none;
+      }
+      #pause-radio #radio #radio-main {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+      }
+      #pause-radio #radio-titlebar { height: 30px; }
+      #pause-radio #radio-power { width: 20px; height: 20px; }
+      #pause-radio #radio-transport { gap: 6px; }
+      #pause-radio #radio-transport button,
+      #pause-radio #radio-transport a {
+        min-width: 48px;
+        height: 44px;
+        font-size: 14px;
+      }
+      #pause-radio #radio-volume { height: 16px; margin-top: 4px; }
+      #pause-menu {
+        position: fixed;
+        inset: 0;
+        z-index: 8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: rgba(1, 3, 2, 0.72);
+        color: #d7ffd0;
+        font-family: "Arial Narrow", "Roboto Condensed", sans-serif;
+      }
+      #pause-menu[hidden] { display: none; }
+      #pause-sheet {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: min(420px, 100%);
+        max-height: 100%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        box-sizing: border-box;
+        padding: 18px 20px 20px;
+        border: 1px solid rgba(57, 255, 20, 0.5);
+        border-radius: 14px;
+        background: #06100a;
+      }
+      #pause-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      #pause-title {
+        margin: 0;
+        color: var(--matrix-green);
+        font: 400 40px/1 "VT323", ui-monospace, monospace;
+        text-shadow: 0 0 10px rgba(57, 255, 20, 0.45);
+      }
+      #pause-session,
+      .pause-cap {
+        color: var(--caption);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+      }
+      #pause-resume,
+      #pause-restart,
+      .pause-secondary {
+        border-radius: 10px;
+        font: 700 16px/1 "Arial Narrow", "Roboto Condensed", sans-serif;
+        letter-spacing: 2px;
+        cursor: pointer;
+      }
+      #pause-resume {
+        flex: 0 0 auto;
+        height: 56px;
+        border: 0;
+        background: var(--matrix-green);
+        color: #041006;
+        font-size: 20px;
+        letter-spacing: 4px;
+      }
+      .pause-card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid rgba(57, 255, 20, 0.25);
+        border-radius: 10px;
+      }
+      #pause-handle-row { flex-direction: row; align-items: center; gap: 12px; }
+      #pause-handle-row > div { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+      #pause-handle {
+        color: #efffec;
+        font: 400 26px/1 "VT323", ui-monospace, monospace;
+        overflow-wrap: anywhere;
+      }
+      .pause-secondary {
+        height: 44px;
+        padding: 0 16px;
+        border: 1px solid rgba(57, 255, 20, 0.55);
+        background: transparent;
+        color: #b7ffab;
+      }
+      .pause-legend {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        gap: 6px 10px;
+        margin: 0;
+        font-size: 15px;
+      }
+      .pause-legend[hidden] { display: none; }
+      .pause-legend dt { color: var(--matrix-green); font-weight: 700; }
+      .pause-legend dd { margin: 0; }
+      #pause-settings { display: flex; flex-direction: column; }
+      .pause-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 48px;
+        color: #efffec;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .pause-toggle[hidden] { display: none; }
+      .pause-toggle:not([hidden]) ~ .pause-toggle { border-top: 1px solid rgba(57, 255, 20, 0.15); }
+      .pause-toggle input {
+        appearance: none;
+        -webkit-appearance: none;
+        position: relative;
+        flex: 0 0 auto;
+        width: 52px;
+        height: 32px;
+        margin: 0;
+        border: 1px solid rgba(183, 255, 171, 0.45);
+        border-radius: 999px;
+        background: #0b1a10;
+        cursor: pointer;
+      }
+      .pause-toggle input::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #8fa88c;
+        transition: transform 120ms ease;
+      }
+      .pause-toggle input:checked { border-color: var(--matrix-green); background: #1d5a24; }
+      .pause-toggle input:checked::before { transform: translateX(20px); background: var(--matrix-green); }
+      #pause-restart {
+        flex: 0 0 auto;
+        height: 48px;
+        border: 1px solid rgba(255, 122, 69, 0.6);
+        background: transparent;
+        color: #ffa27a;
+      }
+      #pause-menu button:focus-visible,
+      #pause-menu input:focus-visible {
+        outline: 2px solid #efffec;
+        outline-offset: 2px;
+      }
+      /* On a portrait phone the sheet rises from the bottom edge, in reach. */
+      @media (max-width: 700px) {
+        #pause-menu {
+          align-items: flex-end;
+          padding: max(24px, env(safe-area-inset-top)) 0 0;
         }
-        #radio:not(.on) { width: 156px; }
-        #move-stick {
-          bottom: max(52px, calc(env(safe-area-inset-bottom) + 44px));
+        #pause-sheet {
+          width: 100%;
+          padding-bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
+          border-width: 1px 0 0;
+          border-radius: 18px 18px 0 0;
         }
-        #punch-button {
-          bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
-        }
-        #jump-button {
-          bottom: max(144px, calc(env(safe-area-inset-bottom) + 136px));
-        }
-        #lift-button {
-          bottom: max(100px, calc(env(safe-area-inset-bottom) + 92px));
-        }
-        #radio.on ~ #mobile-controls #move-stick {
-          bottom: max(160px, calc(env(safe-area-inset-bottom) + 152px));
-        }
-        #radio.on ~ #mobile-controls #punch-button {
-          bottom: max(164px, calc(env(safe-area-inset-bottom) + 156px));
-        }
-        #radio.on ~ #mobile-controls #jump-button {
-          bottom: max(252px, calc(env(safe-area-inset-bottom) + 244px));
-        }
-        #radio.on ~ #mobile-controls #lift-button {
-          bottom: max(208px, calc(env(safe-area-inset-bottom) + 200px));
+        #pause-sheet::before {
+          content: "";
+          flex: 0 0 auto;
+          align-self: center;
+          width: 40px;
+          height: 4px;
+          margin: -6px 0 -4px;
+          border-radius: 2px;
+          background: rgba(183, 255, 171, 0.35);
         }
       }
       #handle-gate {
@@ -1015,27 +1548,30 @@
       </div>
     </div>
     <div id="damage-flash" aria-hidden="true"></div>
-    <div id="arcade-bar">
-      <div class="arcade-col">
-        <span id="arcade-1up" class="arcade-label">1UP</span>
-        <span id="arcade-run" class="arcade-value">0 · 0:00</span>
-      </div>
-      <div class="arcade-col">
-        <span id="arcade-high-label" class="arcade-label">HIGH SCORE</span>
-        <span id="arcade-high" class="arcade-value">-- · --</span>
-      </div>
-    </div>
     <section id="game-over" role="status" aria-live="assertive" aria-atomic="true" hidden>
       <h1 id="game-over-title">GAME OVER</h1>
       <div id="game-over-handle">UNSET</div>
       <div id="game-over-stats">
-        <div id="game-over-score">0 AGENTS NEUTRALIZED</div>
-        <div id="game-over-session">SESSION 0:00</div>
+        <div class="game-over-stat">
+          <span class="game-over-cap">AGENTS NEUTRALIZED</span>
+          <span id="game-over-score">0</span>
+        </div>
+        <div class="game-over-stat">
+          <span class="game-over-cap">SESSION</span>
+          <span id="game-over-session">0:00</span>
+        </div>
       </div>
       <div id="game-over-record" hidden>NEW HIGH SCORE</div>
       <div id="game-over-best">HIGH SCORES</div>
       <ol id="high-score-table" aria-label="High scores"></ol>
-      <div id="game-over-hint">PRESS R OR TAP HIT TO RETRY</div>
+      <div id="game-over-actions">
+        <button id="game-over-retry" type="button">RETRY</button>
+        <div id="game-over-secondary">
+          <button id="game-over-edit" class="game-over-secondary" type="button">EDIT HANDLE</button>
+          <button id="game-over-board" class="game-over-secondary" type="button" hidden>LOCAL BOARD</button>
+        </div>
+      </div>
+      <div id="game-over-hint">PRESS R OR J TO RETRY</div>
     </section>
     <div id="radio" role="group" aria-label="Radio Free Zion player">
       <div id="radio-titlebar">
@@ -1071,21 +1607,36 @@
     </div>
     <div id="hud">
       <div id="hud-heading">
-        <span><b>AGENT SYNDICATE</b> // <span id="app-version">prototype</span></span>
+        <span id="hud-title"><b>AGENT SYNDICATE</b> // <span id="app-version">prototype</span></span>
         <button id="instructions-toggle" class="hud-button" type="button" aria-controls="control-instructions">KEYS</button>
         <button id="instructions-minimize" class="hud-button" type="button" aria-controls="control-instructions">HIDE</button>
+        <button id="pause-button" class="hud-button" type="button" aria-label="Pause" aria-controls="pause-menu" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="3" x2="6" y2="15" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+          <span class="pause-label">PAUSE</span>
+        </button>
       </div>
       <div id="control-instructions" aria-live="polite">
       <span class="desktop-help">
         Click to look &nbsp;·&nbsp; Mouse — camera &nbsp;·&nbsp; WASD / Arrows — move<br />
         Shift — sprint &nbsp;·&nbsp; J — punch &nbsp;·&nbsp; Space — jump &nbsp;·&nbsp; E — lift car<br />
-        J while carrying — throw &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; M — mute radio &nbsp;·&nbsp; Esc — release mouse
+        J while carrying — throw &nbsp;·&nbsp; P — pause &nbsp;·&nbsp; R — retry &nbsp;·&nbsp; M — mute radio &nbsp;·&nbsp; Esc — release mouse
       </span>
       <span class="touch-help">Left stick — move / sprint &nbsp;·&nbsp; Drag open space — camera &nbsp;·&nbsp; LIFT — grab / throw the car</span>
+      </div>
+      <div id="arcade-bar">
+        <div class="arcade-col">
+          <span id="arcade-1up" class="arcade-label">1UP</span>
+          <span id="arcade-run" class="arcade-value">0 · 0:00</span>
+        </div>
+        <div class="arcade-col">
+          <span id="arcade-high-label" class="arcade-label">HIGH SCORE</span>
+          <span id="arcade-high" class="arcade-value">-- · --</span>
+        </div>
       </div>
       <div id="combat-hud">
         <div class="hud-meter-label">
           <span id="player-handle">
+            <span class="hud-cap">AGENT</span>
             <span id="run-handle">UNSET</span>
             <button id="handle-edit" type="button" aria-label="Change your handle">EDIT</button>
           </span>
@@ -1102,13 +1653,13 @@
         >
           <span id="player-health-fill" class="hud-meter-fill"></span>
         </div>
-        <div class="hud-meter-label">
+        <div class="hud-meter-label enemy-meter">
           <span>SYSTEM AGENTS</span>
           <span id="enemy-health-value">5 ACTIVE / 0 DOWN</span>
         </div>
         <div
           id="enemy-health-meter"
-          class="hud-meter"
+          class="hud-meter enemy-meter"
           role="progressbar"
           aria-label="System Agent pack health"
           aria-valuemin="0"
@@ -1117,11 +1668,64 @@
         >
           <span id="enemy-health-fill" class="hud-meter-fill"></span>
         </div>
-        <div id="objective">OBJECTIVE // SURVIVE CROWD (5 ACTIVE, 2 ATTACK SLOTS)</div>
+        <div id="objective"><span id="objective-text">DEFEND YOURSELF</span> <span id="objective-progress">0/3</span></div>
         <div id="lift-prompt" role="status" aria-live="polite" hidden></div>
       </div>
     </div>
+    <button id="radio-shout" type="button" aria-pressed="false" aria-label="Radio Free Zion: OFF — turn on" data-status="off">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5v3a1 1 0 0 0 1 1h3l9 5V4.5l-9 5H4a1 1 0 0 0-1 1z" /><path d="M7 14.5l1.4 4.5h2.6l-1.3-4" /><path d="M19.5 9a4 4 0 0 1 0 6" /></svg>
+    </button>
+    <div id="pause-menu" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+      <div id="pause-sheet">
+        <div id="pause-header">
+          <h1 id="pause-title">PAUSED</h1>
+          <span id="pause-session">RUN FROZEN · 0:00</span>
+        </div>
+        <button id="pause-resume" type="button">RESUME</button>
+        <div id="pause-handle-row" class="pause-card">
+          <div>
+            <span class="pause-cap">HANDLE</span>
+            <span id="pause-handle">UNSET</span>
+          </div>
+          <button id="pause-handle-edit" class="pause-secondary" type="button">EDIT</button>
+        </div>
+        <div id="pause-radio"></div>
+        <div class="pause-card">
+          <span class="pause-cap">CONTROLS</span>
+          <dl id="pause-legend-touch" class="pause-legend">
+            <dt>STICK</dt><dd>Move — push to the edge to sprint</dd>
+            <dt>DRAG</dt><dd>Look around, anywhere off the controls</dd>
+            <dt>HIT</dt><dd>Punch · throws while carrying</dd>
+            <dt>JUMP</dt><dd>Jump</dd>
+            <dt>LIFT</dt><dd>Grab the car when you are beside it</dd>
+          </dl>
+          <dl id="pause-legend-keys" class="pause-legend">
+            <dt>WASD</dt><dd>Move · Shift to sprint</dd>
+            <dt>MOUSE</dt><dd>Camera — click to look, Esc to release</dd>
+            <dt>J</dt><dd>Punch · throws while carrying</dd>
+            <dt>SPACE</dt><dd>Jump</dd>
+            <dt>E</dt><dd>Lift the car</dd>
+            <dt>P</dt><dd>Pause · M mutes the radio · R retries</dd>
+          </dl>
+        </div>
+        <div id="pause-settings">
+          <label id="pause-left-row" class="pause-toggle">
+            <span>Left-handed layout</span>
+            <input id="pause-left-handed" type="checkbox" role="switch" />
+          </label>
+          <label id="pause-haptics-row" class="pause-toggle">
+            <span>Vibrate on hit</span>
+            <input id="pause-haptics" type="checkbox" role="switch" />
+          </label>
+        </div>
+        <button id="pause-restart" type="button">RESTART RUN</button>
+      </div>
+    </div>
     <div id="mobile-controls" aria-label="Touch controls">
+      <div id="look-hint" hidden>
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9h12M3 9l3-3M3 9l3 3M15 9l-3-3M15 9l-3 3" /></svg>
+        Drag open space to look around
+      </div>
       <div id="move-stick" role="group" aria-label="Movement joystick">
         <div id="move-stick-thumb"></div>
       </div>

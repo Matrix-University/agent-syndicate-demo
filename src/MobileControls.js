@@ -2,6 +2,7 @@ const JOYSTICK_RADIUS = 52;
 const JOYSTICK_DEAD_ZONE = 0.14;
 const SPRINT_ENTER = 0.95;
 const SPRINT_EXIT = 0.85;
+const LOOK_HINT_KEY = 'agentSyndicate.lookHintSeen';
 
 export class MobileControls {
   constructor(input, elements) {
@@ -12,6 +13,7 @@ export class MobileControls {
     this.jumpButton = elements.jumpButton;
     this.punchButton = elements.punchButton;
     this.liftButton = elements.liftButton;
+    this.lookHint = elements.lookHint ?? null;
 
     this._joystickPointerId = null;
     this._joystickCenterX = 0;
@@ -20,7 +22,14 @@ export class MobileControls {
 
     this._onFirstTouch = (event) => {
       if (event.pointerType === 'touch') document.body.classList.add('touch-controls');
+      // The camera is the one control with no button, so it gets a hint until
+      // the first drag on open space proves the player found it.
+      if (this.lookHint && !this.lookHint.hidden && event.target instanceof HTMLCanvasElement) {
+        this.lookHint.hidden = true;
+        rememberLookHint();
+      }
     };
+    if (this.lookHint) this.lookHint.hidden = lookHintSeen();
     this._onJoystickDown = (event) => this._claimJoystick(event);
     this._onJoystickMove = (event) => this._moveJoystick(event);
     this._onJoystickEnd = (event) => this._releaseJoystick(event.pointerId);
@@ -71,6 +80,19 @@ export class MobileControls {
     }
   }
 
+  // While the car is overhead the attack button is the throw, so it says so and
+  // takes the spotlight; jump is unavailable and LIFT steps aside.
+  setCarryState(carrying) {
+    this.punchButton.classList.toggle('throw', carrying);
+    this.punchButton.textContent = carrying ? 'THROW' : 'HIT';
+    this.punchButton.setAttribute('aria-label', carrying ? 'Throw car' : 'Punch');
+    if (this.jumpButton) {
+      this.jumpButton.disabled = carrying;
+      this.jumpButton.classList.toggle('unavailable', carrying);
+    }
+    this.liftButton?.classList.toggle('carrying', carrying);
+  }
+
   _addActionListeners(button, onDown, onEnd) {
     button.addEventListener('pointerdown', onDown);
     button.addEventListener('pointerup', onEnd);
@@ -113,6 +135,7 @@ export class MobileControls {
 
       if (!this._sprinting && rawMagnitude >= SPRINT_ENTER) this._sprinting = true;
       else if (this._sprinting && rawMagnitude <= SPRINT_EXIT) this._sprinting = false;
+      this.joystick.classList.toggle('sprinting', this._sprinting);
 
       this.thumb.style.transform = `translate(${directionX * thumbDistance}px, ${directionY * thumbDistance}px)`;
       this.input.setMobileMovement(directionX * magnitude, -directionY * magnitude, this._sprinting);
@@ -125,7 +148,7 @@ export class MobileControls {
       this._joystickPointerId = null;
       this._sprinting = false;
       this.thumb.style.transform = 'translate(0, 0)';
-      this.joystick.classList.remove('active');
+      this.joystick.classList.remove('active', 'sprinting');
       this.input.resetMobileMovement();
     }
   }
@@ -169,5 +192,21 @@ export class MobileControls {
     for (const action of this._actions) {
       this._removeActionListeners(action.button, action.onDown, action.onEnd);
     }
+  }
+}
+
+function lookHintSeen() {
+  try {
+    return localStorage.getItem(LOOK_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberLookHint() {
+  try {
+    localStorage.setItem(LOOK_HINT_KEY, '1');
+  } catch {
+    // Blocked storage: the hint comes back next visit, which is harmless.
   }
 }

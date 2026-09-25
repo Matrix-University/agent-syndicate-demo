@@ -4,6 +4,56 @@ All notable changes to this project are documented in this file, which follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format. This project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-09-24
+
+### Added
+
+- A pause sheet, opened from the HUD's pause button or `P`, and automatically
+  when the tab is hidden (a call or app switch no longer costs the run). It
+  freezes the run like the handle prompt and holds RESUME, the handle with an
+  EDIT button, the full RFZAMP player, a controls legend for the current input
+  and RESTART RUN. On phones it rises from the bottom edge.
+- Device settings in the pause sheet, kept in `localStorage`: a left-handed
+  layout that mirrors the touch controls, and vibrate on hit (landing a punch,
+  taking one, flattening agents with the car) where the browser supports it.
+- The game-over panel has real buttons: RETRY, EDIT HANDLE, and a
+  LOCAL/GLOBAL BOARD toggle once the shared board has answered.
+- A one-time "Drag open space to look around" hint on touch screens, dismissed
+  by the first camera drag.
+
+### Changed
+
+- Phones get one HUD panel: handle, 1UP, HIGH SCORE and pause on the top row,
+  health as nine blocks under it (orange at 3 or below), and the objective as a
+  chip below with `n/3` progress that wraps instead of truncating. Landscape
+  phones split it: handle and health top left, the run readout and objective
+  top centre, radio and pause top right.
+- On phones RFZAMP collapses to a megaphone button coloured by the stream's
+  status — dim off, pulsing while tuning, green on air, amber when blocked or
+  offline — that switches the radio on and off; the full player lives in the
+  pause sheet. The touch controls no longer shift to make room for it.
+- Touch controls: HIT is larger, LIFT lights up when the car is in reach, and
+  while carrying HIT becomes a solid THROW button with JUMP dimmed and LIFT
+  hidden. The joystick's dashed outer ring marks the sprint zone and lights up
+  while sprinting.
+- The objective reads its text and progress from separate elements
+  (`#objective-text`, `#objective-progress`) and flashes once when it switches
+  to the car.
+- Game-over stats are two tiles (agents neutralized, session), the arcade bar
+  steps aside while the panel is up, and the panel has a backdrop.
+- The run skill's driver maps `KeyP`, adds a `viewport <w> <h> [touch]` script
+  command for phone layouts, and reports page exceptions and the last boot
+  stage when the game never starts.
+
+### Fixed
+
+- Phone players can retry after dying. The touch controls are hidden while the
+  game-over panel is up, so the old "tap HIT to retry" had no button to tap;
+  the panel's RETRY button replaces it.
+- The run skill's smoke test no longer freezes on load: a fresh browser profile
+  opened the handle prompt, which froze the run, so the driver now takes the
+  suggested handle after each page load.
+
 ## [0.5.1] - 2026-09-24
 
 ### Changed

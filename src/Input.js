@@ -126,6 +126,10 @@ export class Input {
     return this.wasPressed('KeyR');
   }
 
+  get pausePressed() {
+    return this.wasPressed('KeyP');
+  }
+
   get radioMutePressed() {
     return this.wasPressed('KeyM');
   }

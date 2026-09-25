@@ -31,7 +31,7 @@ const KEYS = {
   KeyW: { key: 'w', vk: 87 }, KeyA: { key: 'a', vk: 65 },
   KeyS: { key: 's', vk: 83 }, KeyD: { key: 'd', vk: 68 },
   KeyJ: { key: 'j', vk: 74 }, KeyE: { key: 'e', vk: 69 },
-  KeyR: { key: 'r', vk: 82 }, KeyM: { key: 'm', vk: 77 },
+  KeyR: { key: 'r', vk: 82 }, KeyM: { key: 'm', vk: 77 }, KeyP: { key: 'p', vk: 80 },
   Space: { key: ' ', vk: 32 },
   ShiftLeft: { key: 'Shift', vk: 16, modifiers: 8 },
   ArrowUp: { key: 'ArrowUp', vk: 38 }, ArrowDown: { key: 'ArrowDown', vk: 40 },
@@ -67,10 +67,16 @@ class CDP {
     this.ws = ws;
     this.id = 0;
     this.pending = new Map();
+    this.exceptions = []; // uncaught page errors, reported when boot fails
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.method === 'Runtime.exceptionThrown') {
+        const d = msg.params.exceptionDetails;
+        this.exceptions.push(d.exception?.description || d.text);
+        return;
+      }
       const slot = this.pending.get(msg.id);
-      if (!slot) return; // an event, not a reply — we don't subscribe to any
+      if (!slot) return; // an event we don't act on
       this.pending.delete(msg.id);
       if (msg.error) slot.reject(new Error(`${msg.error.message} (${msg.error.code})`));
       else slot.resolve(msg.result);
@@ -150,6 +156,7 @@ class Session {
     const targets = await this.waitForPageTarget();
     this.cdp = await this.connect(targets.webSocketDebuggerUrl);
     await this.cdp.send('Page.enable');
+    await this.cdp.send('Runtime.enable');
     return this;
   }
 
@@ -176,13 +183,19 @@ class Session {
   async nav(url = this.url) {
     await this.cdp.send('Page.navigate', { url });
     await this.ready();
+    // A fresh profile has no handle, and the prompt freezes the run until one
+    // is chosen — take the suggestion so movement and combat can be driven.
+    await this.cdp.eval(`(() => {
+      if (window.__game.handleDialog.isOpen) document.getElementById('handle-gate-skip').click();
+    })()`);
   }
 
   // The game boots async (GLB + Draco decoder), so poll for the live handle.
   async ready(timeoutMs = 30000) {
     const deadline = Date.now() + timeoutMs;
+    let state = null;
     while (Date.now() < deadline) {
-      const state = await this.cdp.eval(`(() => {
+      state = await this.cdp.eval(`(() => {
         const c = document.getElementById('app');
         if (!c) return { stage: 'no-canvas' };
         const gl = c.getContext('webgl2') || c.getContext('webgl');
@@ -196,7 +209,8 @@ class Session {
       if (state.stage === 'no-webgl') throw new Error('No WebGL context — SwiftShader flags missing?');
       await sleep(400);
     }
-    throw new Error('Game never reached a rendering state within timeout');
+    const errors = this.cdp.exceptions.map((e) => `\n${e}`).join('');
+    throw new Error(`Game never reached a rendering state within timeout (last: ${JSON.stringify(state)})${errors}`);
   }
 
   async key(type, code) {
@@ -401,6 +415,16 @@ async function script(s) {
       else if (cmd === 'wait') await sleep(Number(rest[0] ?? 500));
       else if (cmd === 'shot') console.log(await s.shot(rest[0] ?? 'shot'));
       else if (cmd === 'eval') console.log(JSON.stringify(await s.cdp.eval(rest.join(' '))));
+      // viewport <w> <h> [touch]: phone layouts. `touch` also turns on
+      // (any-pointer: coarse) so the touch controls and compact HUD show.
+      else if (cmd === 'viewport') {
+        const touch = rest[2] === 'touch';
+        await s.cdp.send('Emulation.setDeviceMetricsOverride', {
+          width: Number(rest[0]), height: Number(rest[1]), deviceScaleFactor: 1, mobile: touch,
+        });
+        await s.cdp.send('Emulation.setTouchEmulationEnabled', { enabled: touch, maxTouchPoints: touch ? 5 : 0 });
+        await s.cdp.send('Emulation.setEmitTouchEventsForMouse', { enabled: touch });
+      }
       else console.log(`? unknown command: ${cmd}`);
     } catch (err) {
       console.log(`ERR ${err.message}`);

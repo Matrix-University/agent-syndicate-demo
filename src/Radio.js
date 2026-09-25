@@ -25,8 +25,11 @@ const STATUS_LABEL = {
 };
 
 export class Radio {
-  constructor({ root }) {
+  constructor({ root, shoutButton = null }) {
     this.root = root;
+    // The compact HUD's stand-in for the whole window: one megaphone, lit by
+    // the stream's status, that switches the radio on and off.
+    this.shoutButton = shoutButton;
     const part = (id) => root.querySelector(`#${id}`);
     this.powerButton = part('radio-power');
     this.playButton = part('radio-play');
@@ -61,6 +64,7 @@ export class Radio {
     // A focused control would swallow Space (jump) and the arrows (move), so
     // every click hands focus straight back.
     this._onPower = () => { this.toggle(); this.powerButton.blur(); };
+    this._onShout = () => { this.toggle(); this.shoutButton.blur(); };
     this._onPlay = () => { this.turnOn(); this.playButton.blur(); };
     this._onStop = () => { this.turnOff(); this.stopButton.blur(); };
     this._onMute = () => { this.toggleMute(); this.muteButton.blur(); };
@@ -74,6 +78,7 @@ export class Radio {
     };
 
     this.powerButton.addEventListener('click', this._onPower);
+    this.shoutButton?.addEventListener('click', this._onShout);
     this.playButton.addEventListener('click', this._onPlay);
     this.stopButton.addEventListener('click', this._onStop);
     this.muteButton.addEventListener('click', this._onMute);
@@ -203,6 +208,15 @@ export class Radio {
     this.powerButton.title = this.on ? 'Turn radio off' : 'Turn radio on';
     this.muteButton.setAttribute('aria-pressed', String(this.muted));
     this.statusEl.textContent = STATUS_LABEL[this.status];
+    if (this.shoutButton) {
+      const label = `Radio Free Zion: ${STATUS_LABEL[this.status]}${this.on && silent ? ', muted' : ''}`
+        + ` — turn ${this.on ? 'off' : 'on'}`;
+      this.shoutButton.dataset.status = this.status;
+      this.shoutButton.classList.toggle('muted', silent);
+      this.shoutButton.setAttribute('aria-pressed', String(this.on));
+      this.shoutButton.setAttribute('aria-label', label);
+      this.shoutButton.title = label;
+    }
 
     const volumePercent = Math.round(this.volume * 100);
     this.volumeInput.value = String(volumePercent);
@@ -249,6 +263,7 @@ export class Radio {
 
   dispose() {
     this.powerButton.removeEventListener('click', this._onPower);
+    this.shoutButton?.removeEventListener('click', this._onShout);
     this.playButton.removeEventListener('click', this._onPlay);
     this.stopButton.removeEventListener('click', this._onStop);
     this.muteButton.removeEventListener('click', this._onMute);
