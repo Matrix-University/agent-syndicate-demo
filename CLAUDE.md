@@ -169,6 +169,15 @@ Every `Enemy` shares one kit of geometry and materials (`AgentKit.acquire()` /
 `release()`, freed with the last user) except its suit, which it clones because
 the suit's emissive is that agent's hit flash. Keep new agent parts in the kit.
 
+They have no clips: `Enemy._animate` ports the player's baked patterns (the
+`WALK`/`RUN` profiles mirror `scripts/lib/locomotion.mjs`) onto the kit's joints,
+driven by how the root actually moved. It rewrites the whole pose every frame
+from state, so gait, stalk, strike, flinch, fall and idle add up in one place —
+the AI sets state (`aiState`, `_aiTimer`), never joints. Floor contact is
+computed from `AGENT_LEG`, so change leg proportions there. The stalk (the body
+turning into its path while the head holds the player) turns `rig` only: `root`
+must keep facing the player, since `CombatSystem._strikeConnects` reads its yaw.
+
 **The authored clips are additive — never overwrite a shipped clip to make room.**
 `Walk_Carry_Loop` is both an authoring source _and_ a shipped clip (renamed
 `Carry_Loop` via `RENAME`); it stays bound to `STATE.CARRY`, selected by nothing,

@@ -13,8 +13,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 // Proportions, in the game's metres (an agent stands ~3.1 tall).
 const HIP_Y = 1.4;
+const HIP_X = 0.2;
+const THIGH = 0.62;
+const SHIN = 0.61;
 const SHOULDER_Y = 2.35;
 const SHOULDER_X = 0.6;
+const UPPER_ARM = 0.5;
+const FOREARM = 0.5;
+const NECK_Y = 2.66; // the head's pivot, at the top of the neck
 const HEAD_Y = 2.86;
 const HEAD = { x: 0.19, y: 0.25, z: 0.22 };
 const TORSO_DEPTH = 0.6; // the jacket is an ellipse this much deeper than wide
@@ -25,6 +31,10 @@ const TORSO_PROFILE = [
   [0.001, 1.2], [0.39, 1.2], [0.42, 1.3], [0.39, 1.55], [0.41, 1.85],
   [0.49, 2.18], [0.54, 2.38], [0.46, 2.5], [0.2, 2.58], [0.001, 2.6],
 ];
+
+// The leg chain as Enemy's floor contact needs it: the hip's height, hip to knee
+// to ankle, then the sole's depth under the ankle and its heel and toe either side.
+export const AGENT_LEG = { hipY: HIP_Y, thigh: THIGH, shin: SHIN, sole: 0.12, heel: -0.16, toe: 0.3 };
 
 export const HAIR_STYLES = {
   black: { color: 0x0b0b0d, skin: 0xa86e4a, cut: 'peak' },
@@ -79,8 +89,9 @@ export class AgentKit {
   }
 
   /**
-   * Assembles one agent into `rig` and returns the limb pivots Enemy animates.
-   * `suit` is that agent's own clone of `this.suit`.
+   * Assembles one agent into `rig` and returns the joints Enemy animates: the
+   * head, and shoulder/elbow and hip/knee/ankle down each limb. `suit` is that
+   * agent's own clone of `this.suit`.
    */
   assemble(rig, hairVariant, suit) {
     const g = this.geometry;
@@ -92,6 +103,12 @@ export class AgentKit {
       parent.add(mesh);
       return mesh;
     };
+    const pivot = (parent, x, y) => {
+      const joint = new THREE.Group();
+      joint.position.set(x, y, 0);
+      parent.add(joint);
+      return joint;
+    };
 
     add(rig, g.torso, suit, true);
     add(rig, g.lapels, this.lapel);
@@ -102,28 +119,45 @@ export class AgentKit {
     add(rig, g.buttons, this.tie);
     add(rig, g.pockets, this.lapel);
     add(rig, g.neck, skin, true);
-    add(rig, g.head, skin, true);
-    add(rig, g.face, skin);
-    add(rig, g.mouth, this.tie);
-    add(rig, g.hair[HAIR_STYLES[style].cut], this.hair[style], true);
-    add(rig, g.lenses, this.lens);
-    add(rig, g.frames, this.metal);
-    add(rig, g.earbud, this.earpiece);
-    add(rig, g.earCoil, this.earpiece);
 
-    const limb = (x, y, parts) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, y, 0);
-      for (const [geometry, material, shadow] of parts) add(pivot, geometry, material, shadow);
-      rig.add(pivot);
-      return pivot;
+    // The head turns on its own pivot so it can hold its stare while the body
+    // leans and turns under it. Its geometry is built in rig space, hence the
+    // inner offset.
+    const head = pivot(rig, 0, NECK_Y);
+    const skull = pivot(head, 0, -NECK_Y);
+    add(skull, g.head, skin, true);
+    add(skull, g.face, skin);
+    add(skull, g.mouth, this.tie);
+    add(skull, g.hair[HAIR_STYLES[style].cut], this.hair[style], true);
+    add(skull, g.lenses, this.lens);
+    add(skull, g.frames, this.metal);
+    add(skull, g.earbud, this.earpiece);
+    add(skull, g.earCoil, this.earpiece);
+
+    const arm = (side) => {
+      const shoulder = pivot(rig, side * SHOULDER_X, SHOULDER_Y);
+      add(shoulder, g.upperArm, suit, true);
+      const elbow = pivot(shoulder, 0, -UPPER_ARM);
+      add(elbow, g.forearm, suit, true);
+      add(elbow, g.cuff, this.shirt);
+      add(elbow, side < 0 ? g.handR : g.handL, skin, true);
+      return [shoulder, elbow];
     };
-    const arm = (side) => limb(side * SHOULDER_X, SHOULDER_Y, [
-      [g.shoulder, suit, true], [g.sleeve, suit, true], [g.cuff, this.shirt], [side < 0 ? g.handR : g.handL, skin, true],
-    ]);
-    const leg = (side) => limb(side * 0.2, HIP_Y, [[g.trouser, suit, true], [g.shoe, this.shoes, true]]);
+    const leg = (side) => {
+      const hip = pivot(rig, side * HIP_X, HIP_Y);
+      add(hip, g.thigh, suit, true);
+      const knee = pivot(hip, 0, -THIGH);
+      add(knee, g.shin, suit, true);
+      const ankle = pivot(knee, 0, -SHIN);
+      add(ankle, g.shoe, this.shoes, true);
+      return [hip, knee, ankle];
+    };
     // Left is +X: agents face +Z, so their own left is the viewer's right.
-    return { armL: arm(1), armR: arm(-1), legL: leg(1), legR: leg(-1) };
+    const [armL, elbowL] = arm(1);
+    const [armR, elbowR] = arm(-1);
+    const [legL, kneeL, footL] = leg(1);
+    const [legR, kneeR, footR] = leg(-1);
+    return { head, armL, elbowL, armR, elbowR, legL, kneeL, footL, legR, kneeR, footR };
   }
 
   _dispose() {
@@ -175,15 +209,33 @@ function buildGeometry() {
     hair: { peak: buildHair('peak'), crop: buildHair('crop') },
     ...buildShades(),
     ...buildEarpiece(),
-    // Rounds the sleeve head into the shoulder, so the arm's top isn't a flat disc.
-    shoulder: new THREE.SphereGeometry(0.155, 16, 10).translate(0, -0.03, 0),
-    sleeve: new THREE.CylinderGeometry(0.15, 0.12, 1.0, 14).translate(0, -0.5, 0),
-    cuff: new THREE.CylinderGeometry(0.118, 0.118, 0.05, 14).translate(0, -1.01, 0),
-    handL: buildHand(1),
-    handR: buildHand(-1),
-    trouser: new THREE.CylinderGeometry(0.16, 0.125, 1.22, 14).translate(0, -0.61, 0),
-    shoe: buildShoe(),
+    // Each limb is two segments, built from its own joint down. The shoulder cap
+    // rounds the sleeve head so the arm's top isn't a flat disc; the elbow and
+    // knee balls fill the outside of the joint as it bends.
+    upperArm: mergeWithUv([
+      new THREE.SphereGeometry(0.155, 16, 10).translate(0, -0.03, 0),
+      segment(0.15, 0.135, UPPER_ARM),
+    ]),
+    forearm: mergeWithUv([new THREE.SphereGeometry(0.135, 14, 10), segment(0.135, 0.12, FOREARM)]),
+    cuff: new THREE.CylinderGeometry(0.118, 0.118, 0.05, 14).translate(0, -FOREARM - 0.01, 0),
+    handL: buildHand(1).translate(0, UPPER_ARM, 0),
+    handR: buildHand(-1).translate(0, UPPER_ARM, 0),
+    thigh: segment(0.16, 0.142, THIGH),
+    shin: mergeWithUv([new THREE.SphereGeometry(0.142, 14, 10), segment(0.142, 0.125, SHIN)]),
+    shoe: buildShoe().translate(0, THIGH + SHIN, 0),
   };
+}
+
+// A limb segment hanging from its joint at the origin.
+function segment(top, bottom, length) {
+  return new THREE.CylinderGeometry(top, bottom, length, 14).translate(0, -length / 2, 0);
+}
+
+// mergeAll without dropping UVs, for suit pieces: the fabric bump map needs them.
+function mergeWithUv(geometries) {
+  const merged = mergeGeometries(geometries);
+  geometries.forEach((g) => g.dispose());
+  return merged;
 }
 
 // The chest surface at (x, y): the lathe profile's radius there, on the ellipse.

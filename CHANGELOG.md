@@ -10,6 +10,18 @@ All notable changes to this project are documented in this file, which follows
 
 ### Changed
 
+- The System Agents move like the player instead of swinging rigid limbs. They
+  gain knees, elbows, ankles and a head that turns on its own, and their walk
+  and run follow the player's baked Walk and Run: arms swing against the legs
+  with the elbows closing on the forward swing, knees fold through the stride,
+  the body leans in from the hips and settles onto the planted foot instead of
+  floating at full stride, and a charging agent runs with a flight phase.
+  Circling agents turn into their path and side-step without crossing their
+  legs while their heads stay on the player. They ease into and out of motion,
+  backpedal more slowly when backing off, shuffle when turning on the spot,
+  and breathe and shift their weight while standing. The strike chambers the
+  right fist and drives it straight out with the left hand up in guard, and a
+  hit snaps the head back. Attack timings, reach and damage are unchanged.
 - The player is dressed after `docs/image references/AGENT_HULK_SHEET.png` on
   the mannequin's own body: a white two-button suit with notched lapels, flap
   pockets, padded shoulders, a vented back and creased trousers, a black shirt
