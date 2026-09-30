@@ -4,17 +4,19 @@ A third-person brawler prototype built on **Three.js `^0.160`** + **Vite**, plai
 ES modules, no framework, no TypeScript. Keep suggestions in that idiom: small
 classes, `import * as THREE from 'three'`, addons via `three/addons/...`.
 
-**Dual target:** a browser game whose **3D assets are the same files a Decentraland
-(SDK7) scene loads**. Three.js engine code does *not* run in DCL — only the **GLB
-assets** port.
+**Project goal: browser-first.** Full Decentraland (DCL SDK7) compatibility is no
+longer required, and incompatibilities are acceptable. Preserve compatibility
+where practical during requested work, but do not rewrite code, rebake assets,
+or add optimization/porting work solely to restore DCL compatibility today.
+Browser-only features and assets are allowed when the browser game needs them.
 
-**Invariant — one asset, both targets:** browser and DCL load the *same* baked
-`public/models/agent-dcl.glb` (single GLB, embedded clips, Draco). Don't introduce a
-browser-only character asset or a separate runtime animation file as the shipped
-path, and don't apply browser-only optimizations (Meshopt, KTX2) to it — DCL can't
-read them. Keep new shipped assets within the DCL rules in the "Decentraland
-compatibility" section below (and [docs/decentraland-asset-compat.md](../docs/decentraland-asset-compat.md),
-[docs/baking-animations.md](../docs/baking-animations.md)).
+**Current asset pipeline, not an invariant:** the browser loads
+`public/models/agent-dcl.glb` (single GLB, embedded clips, Draco). Keep the existing
+pipeline unless the task calls for changing it; the filename does not guarantee
+DCL compatibility. Three.js engine code does not run in DCL. See
+[docs/decentraland-asset-compat.md](../docs/decentraland-asset-compat.md) for optional
+porting constraints and [docs/baking-animations.md](../docs/baking-animations.md)
+for the current bake workflow.
 
 ## Project shape
 
@@ -86,7 +88,7 @@ require touching movement.
   drive the mixer from `Player` — call `anim.setLocomotion(state, speedFactor)`,
   `anim.playAction('punch')`, `anim.jumpTakeoff()`/`anim.jumpLand()`, `anim.update(dt)`.
 - `Player` loads the single baked **`/models/agent-dcl.glb`** (Quaternius CC0,
-  Draco-compressed, clips embedded — same file as the DCL build) via `GLTFLoader` +
+  Draco-compressed, clips embedded) via `GLTFLoader` +
   `DRACOLoader` (`three/addons/loaders/...`, decoder in `public/draco/`) and hands the
   clips to an `AnimationController`. An optional `animationUrl` (same-rig clip library)
   is supported for dev. If no model loads, `Player` falls back to the procedural
@@ -100,13 +102,14 @@ require touching movement.
   `Game._loop` calls `input.endFrame()` after `player.update`. `.dispose()` what you
   swap out (`disposeObject`, `AnimationController.dispose()`).
 
-## Decentraland compatibility (keep assets portable)
+## Decentraland compatibility (best effort)
 
-Browser and DCL ship the **same** GLB; running Three.js in DCL is not a goal. When
-generating/optimizing 3D assets, follow these so one file works in both engines:
+The constraints below are reference guidance for assets intentionally targeting
+DCL, not acceptance criteria for the browser game. Note relevant incompatibilities;
+do not fix them solely for DCL unless that work is explicitly requested.
 
-- **GLB (glTF 2.0), single file, animation clips embedded.** Skeletal only. Browser
-  and DCL load the same baked `public/models/agent-dcl.glb` (via `DRACOLoader`,
+- **Current format:** GLB (glTF 2.0), single file, embedded skeletal clips. The
+  browser loads the baked `public/models/agent-dcl.glb` (via `DRACOLoader`,
   decoder in `public/draco/`), produced by `npm run bake:anims:dcl` from sources in
   `models-src/` (see [docs/baking-animations.md](../docs/baking-animations.md)).
   Don't hand-edit the generated `agent-dcl.glb`.
@@ -114,7 +117,8 @@ generating/optimizing 3D assets, follow these so one file works in both engines:
   the exact name; our `CLIP_NAMES` matches loosely — consistent names satisfy both.
 - **DCL supports Draco, NOT Meshopt, and NOT KTX2/Basis textures.** For portable
   assets use **Draco (or uncompressed) + PNG/JPG**; keep Meshopt/KTX2 for
-  browser-only assets (export two profiles if an asset needs both).
+  browser-only assets. Add a second export profile only for an explicitly requested
+  dual-target deliverable.
 - **Low-poly + shared/atlased materials/textures.** DCL caps per `n` parcels:
   triangles `n×10,000`, entities `n×200`, bodies `n×300`, materials
   `log2(n+1)×20`, textures `log2(n+1)×10`. Use instancing/LOD for crowds.

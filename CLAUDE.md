@@ -4,19 +4,19 @@ Guidance for Claude Code working in this repo. A third-person brawler prototype 
 **Three.js `^0.160`** + **Vite**, plain ES modules — no framework, no TypeScript,
 no test runner. Keep changes in that idiom.
 
-**Project goal — dual target:** a good **browser** game whose **3D assets are the
-same files a Decentraland (SDK7) scene would load**. The Three.js _engine code_ will
-not run in Decentraland (DCL scenes are SDK7 TypeScript), so the portable layer is
-the **GLB assets**, not the runtime.
+**Project goal: browser-first.** Full Decentraland (DCL SDK7) compatibility is no
+longer required, and incompatibilities are acceptable. Preserve compatibility
+where practical during requested work, but do not rewrite code, rebake assets,
+or add optimization/porting work solely to restore DCL compatibility today.
+Browser-only features and assets are allowed when the browser game needs them.
 
-**Invariant — one asset, both targets:** the browser and DCL load the _same_ baked
-character file, `public/models/agent-dcl.glb` (single GLB, embedded clips, Draco).
-Preserve this — don't introduce a browser-only character asset or a separate
-runtime animation file as the shipped path, and don't apply browser-only
-optimizations (Meshopt, KTX2) to it (DCL can't read them). Any new shipped 3D asset
-must clear the DCL constraints below so it stays loadable in both. See
-[docs/decentraland-asset-compat.md](docs/decentraland-asset-compat.md) and
-[docs/baking-animations.md](docs/baking-animations.md).
+**Current asset pipeline, not an invariant:** the browser loads
+`public/models/agent-dcl.glb` (single GLB, embedded clips, Draco). Keep the existing
+pipeline unless the task calls for changing it; the filename does not guarantee
+DCL compatibility. Three.js engine code does not run in DCL. See
+[docs/decentraland-asset-compat.md](docs/decentraland-asset-compat.md) for optional
+porting constraints and [docs/baking-animations.md](docs/baking-animations.md)
+for the current bake workflow.
 
 ## Commands
 
@@ -110,11 +110,10 @@ Player calls `anim.setLocomotion(state, speedFactor)`, `anim.playAction('punch')
 `anim.jumpTakeoff()` / `anim.jumpLand()`, `anim.update(dt)` — keep that boundary
 (don't reach into the mixer from `Player`).
 
-`Player` loads the single shared asset **`/models/agent-dcl.glb`** (configured in
+`Player` loads the single baked asset **`/models/agent-dcl.glb`** (configured in
 `Game.js`: `modelUrl`, `modelScale`, `modelYaw`) via `GLTFLoader` + `DRACOLoader`
 (decoder self-hosted in `public/draco/`) and hands its clips to an
-`AnimationController`, which crossfades actions and runs the mixer each frame. This
-is the **same file** uploaded to Decentraland (browser + DCL parity). If the GLB is
+`AnimationController`, which crossfades actions and runs the mixer each frame. If the GLB is
 absent or fails to load, `Player` **falls back** to the primitive placeholder
 animated procedurally in `_animate` (so the project always runs with zero assets) —
 preserve that fallback. `Player` also accepts an optional `animationUrl` (same-rig
@@ -173,7 +172,7 @@ the bone, blended by skin weight, so neighbouring pieces meet flush. Don't push
 the mannequin's rigid pieces around independently — that was tried and read lumpy.
 Keep the width under the armpits modest (`TORSO` side gain) or the hanging arms
 sink into the lats. Mesh and materials only — the skeleton and clips are
-untouched, and both targets get the look from the one GLB.
+untouched, and the look is embedded in the one GLB.
 
 The agents (`src/AgentKit.js`) are procedural, after the BLACK/BROWN/BLONDE sheets.
 Every `Enemy` shares one kit of geometry and materials (`AgentKit.acquire()` /
@@ -210,14 +209,15 @@ was authored for — keep it per-state, or `Run` gets driven at the walk's rate.
 bake **inputs** live in `models-src/`. `.dispose()` what you swap out (`disposeObject`,
 `AnimationController.dispose()`).
 
-## Decentraland compatibility (keep assets portable)
+## Decentraland compatibility (best effort)
 
-Browser and DCL ship the **same** GLB (the invariant above), not running Three.js
-inside DCL. When creating or optimizing 3D assets, follow these so one file works in
-both engines (full detail in [docs/decentraland-asset-compat.md](docs/decentraland-asset-compat.md)):
+The constraints below are reference guidance for assets intentionally targeting
+DCL, not acceptance criteria for the browser game. Note relevant incompatibilities;
+do not fix them solely for DCL unless that work is explicitly requested. Full detail
+is in [docs/decentraland-asset-compat.md](docs/decentraland-asset-compat.md).
 
-- **Format:** single-file **GLB (glTF 2.0)** with **animation clips embedded** in
-  the file. Skeletal animation only. Browser **and** DCL load the same baked
+- **Current format:** single-file **GLB (glTF 2.0)** with embedded skeletal clips.
+  The browser loads the baked
   `public/models/agent-dcl.glb`, produced by **`npm run bake:anims:dcl`** from the
   sources in `models-src/` (see [docs/baking-animations.md](docs/baking-animations.md)).
   Don't hand-edit the generated `agent-dcl.glb`.
@@ -227,7 +227,7 @@ both engines (full detail in [docs/decentraland-asset-compat.md](docs/decentrala
 - **Compression:** DCL supports **Draco**, **not Meshopt**, and **not KTX2/Basis**
   textures. For anything that should stay DCL-portable, use **Draco (or
   uncompressed) + PNG/JPG**. Reserve Meshopt/KTX2 for browser-only assets, and if
-  you keep both, export two profiles rather than one Meshopt file.
+  both targets are explicitly requested, consider separate export profiles.
 - **Budgets:** keep meshes **low-poly** and **share/atlas materials & textures** —
   DCL scenes cap triangles (`n×10,000`), entities (`n×200`), bodies (`n×300`),
   materials (`log2(n+1)×20`), textures (`log2(n+1)×10`) per `n` parcels, counting
@@ -355,7 +355,7 @@ can't skip level 2's code step or reach a disabled gate. Don't move that check
 into the client, and don't add a level without extending `gateLevel.mjs`.
 
 The client picks its form from `/api/gate-status`'s `level`, then branches on the
-*response* (`subscribed` → let them in, `code-sent` → show the code step) rather
+_response_ (`subscribed` → let them in, `code-sent` → show the code step) rather
 than on what it was built with — so a build/server mismatch still lands on the
 right step. Level 1 issues the session cookie from `/api/subscribe/start`, level 2
 from `/api/subscribe/verify`; both are the `201`.

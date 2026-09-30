@@ -306,9 +306,14 @@ its `.fbx` clips need to be retargeted to the agent rig in
 
 ## Animation sources
 
-The shipped character uses one baked `public/models/agent-dcl.glb` for the
-browser and Decentraland. External clips must be retargeted to the agent rig and
-baked into that file; do not ship a source library as a separate runtime asset.
+The browser currently ships one baked `public/models/agent-dcl.glb`. The project
+is **browser-first**: full Decentraland compatibility is no longer required.
+Preserve compatibility where practical, but do not rewrite code or rebake assets
+solely to restore it today. Browser-only features and assets are acceptable.
+See [docs/decentraland-asset-compat.md](docs/decentraland-asset-compat.md).
+
+In the current pipeline, external clips are retargeted to the agent rig and
+baked into that file; source libraries are not shipped as separate runtime assets.
 See [docs/baking-animations.md](docs/baking-animations.md) and
 [models-src/README.md](models-src/README.md). BVH and FBX clips are not
 drop-in replacements for the current same-rig GLB source.

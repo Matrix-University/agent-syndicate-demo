@@ -6,8 +6,8 @@ loads in code as `/models/agent-dcl.glb`.
 This folder holds only the **final, shipped** character asset. The game loads
 **`agent-dcl.glb`** (configured in `src/Game.js`) — a single Draco-compressed GLB
 with the character **and its animation clips embedded**, decoded in the browser via
-`DRACOLoader` (decoder self-hosted in [`public/draco/`](../draco/)). The **same
-file** is what you upload to Decentraland. Until it exists, `Player` falls back to
+`DRACOLoader` (decoder self-hosted in [`public/draco/`](../draco/)). DCL reuse is
+best effort, not guaranteed by the filename. Until it exists, `Player` falls back to
 the primitive placeholder rig — the project always runs.
 
 `agent-dcl.glb` is a **generated build artifact** — don't hand-edit it. It is
@@ -55,14 +55,17 @@ run state falls back to the walk clip sped up (`CLIP_FALLBACK`). New moves exten
 `CLIP_NAMES`/`ACTIONS` there and the `KEEP` set in the bake script (see
 [docs/baking-animations.md](../../docs/baking-animations.md)).
 
-## Decentraland-ready by construction
+## Decentraland compatibility (best effort)
 
-The baked `agent-dcl.glb` already satisfies the DCL asset rules
-([docs/decentraland-asset-compat.md](../../docs/decentraland-asset-compat.md)):
-single-file GLB, **embedded** clips, **Draco** (not Meshopt) geometry, and no
-KTX2 textures. In a DCL scene:
+Full DCL compatibility is no longer required. Preserve it where practical, but
+do not rewrite code or rebake assets solely to restore it today. The current
+bake uses a single GLB, embedded clips, and Draco geometry; that does not guarantee
+compliance with DCL scene budgets or runtime behavior. For an explicitly requested
+port, validate against
+[docs/decentraland-asset-compat.md](../../docs/decentraland-asset-compat.md) before reuse.
+A compatible asset can be loaded in a DCL scene with:
 `GltfContainer.create(e, { src: 'models/agent-dcl.glb' })` + `Animator` referencing
-clip names like `Idle_No_Loop` / `Walk_Carry_Loop`.
+clip names like `Idle_No_Loop` / `Walk`.
 
 ## Other open / free sources
 

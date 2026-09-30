@@ -42,13 +42,15 @@ _overhead_; `Throw_Overhead` is A because the library's only throw is one-armed;
 
 ## Shipped — `public/models/agent-dcl.glb` (14 clips)
 
-The single asset the browser and Decentraland both load. Bindings live in
-`src/AnimationController.js`; intent lives in `src/Player.js`.
+The browser's current baked asset. DCL compatibility is best effort, not a
+requirement; do not rewrite code or rebake assets solely to restore it today.
+See [decentraland-asset-compat.md](./decentraland-asset-compat.md). Bindings live
+in `src/AnimationController.js`; intent lives in `src/Player.js`.
 
 | Clip                  | Dur   | Tier  | Bound to                              | From                                   | Notes                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------- | ----- | ----- | ------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Idle_No_Loop`        | 2.50s | P     | `STATE.IDLE`                          | UAL2 `Idle_No_Loop`                    | Matched by fragment `idle_no` ahead of `idle`, so a prop idle can't win. Also the bake's **posture reference** — the neutral hip pitch `Walk`/`Run` are re-seated onto is measured from this clip.                                                                                                                                                             |
-| `Walk`                | 0.95s | **A** | `STATE.WALK`                          | authored from `Walk_Carry_Loop`        | Source's floor-locked lower body; spine carry-lean removed, hips re-pitched, arms/elbows/fingers authored fresh. `speedFactor` reference is `Player.speedWalk`. Also serves `STATE.WALK_BACK` at a **negative** `timeScale` — see below.                                                                                                                                                                                                |
+| `Walk`                | 0.95s | **A** | `STATE.WALK`                          | authored from `Walk_Carry_Loop`        | Source's floor-locked lower body; spine carry-lean removed, hips re-pitched, arms/elbows/fingers authored fresh. `speedFactor` reference is `Player.speedWalk`. Also serves `STATE.WALK_BACK` at a **negative** `timeScale` — see below.                                                                                                                       |
 | `Run`                 | 0.66s | **A** | `STATE.RUN`                           | independent stride over `Walk`'s torso | Run-only leg keys: knee drive, folded heel recovery, toe-off, and two brief flight phases. Forward lean and bent-elbow pump oppose the new stride. Walk is unchanged. Reference is `Player.speedSprint`.                                                                                                                                                       |
 | `Carry_Loop`          | 2.00s | P     | `STATE.CARRY` (bound, never selected) | UAL2 `Walk_Carry_Loop`, renamed        | The library's chest-height carry walk, parked for a future carry-object state. Don't re-point `WALK` at it, and **don't overwrite it** to make room for a new carry clip.                                                                                                                                                                                      |
 | `Carry_Overhead_Loop` | 1.42s | **A** | `STATE.CARRY_OVERHEAD`                | authored from `Walk_Carry_Loop`        | Walking with a car overhead. Same lower body as `Walk`; arms **raised** (negative `shoulderDrop`), elbows braced, fingers gripping, trunk leaned back under the load. Retimed to `Player`'s carry walk speed.                                                                                                                                                  |
@@ -71,7 +73,8 @@ wired up soon.
 facing when the move points >110 degrees behind the camera) falls back to `Walk`
 played in reverse, at `BACK_SPEED_FACTOR` of walk speed. It reads fine as a
 backpedal, but it is a runtime trick, not an asset: **DCL's `Animator` cannot play
-a clip backwards**, so a DCL port needs a real clip. Authoring one — a `Walk_Back`
+a clip backwards**, so a requested DCL port would need a real clip; this is not
+required work for the browser game. Authoring one — a `Walk_Back`
 recipe over `Walk`'s stride, added to `KEEP` — makes it bind directly and play
 forward in both engines, with no code change (`CLIP_NAMES` already lists
 `walk_back`).

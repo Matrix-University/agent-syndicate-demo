@@ -1,16 +1,39 @@
-# Baking animations into a single GLB (DCL-portable)
+# Baking animations into a single GLB
 
-In the browser the game loads the character (`agent.glb`) and a separate clip
-library (`UAL2_Standard.glb`) and binds the clips at runtime by bone name — handy
-for development. **Decentraland can't read a separate animation file**: it needs
-the clips **embedded in the character GLB**. This pipeline produces that
-single-file version without changing the dev workflow.
+**The shipped browser game loads one character file:**
+`public/models/agent-dcl.glb`, served at `/models/agent-dcl.glb`. It contains the
+character and all 14 shipped animation clips. `Game.js` sets that `modelUrl`
+without an `animationUrl`; the game does not load a separate animation library.
+
+The Node bake combines `models-src/agent.glb` and
+`models-src/UAL2_Standard.glb` into that shipped asset. These are source inputs,
+not additional runtime downloads. `Player` still supports a separate
+`animationUrl` for **development-only** testing. Likewise, the uncompressed
+`models-src/agent-animated.glb` is a development/build intermediate, not a second
+shipped character. Neither option changes the single shipped asset workflow.
+
+**Project policy: browser-first.** Full Decentraland (DCL SDK7) compatibility is
+no longer required, and incompatibilities are acceptable. Preserve compatibility
+where practical during requested work, but do not rewrite code, rebake assets,
+or add optimization/porting work solely to restore DCL compatibility today.
+See [decentraland-asset-compat.md](./decentraland-asset-compat.md) for optional
+porting constraints, not requirements for the browser game.
+
+The single-file bake originated with DCL portability in mind, but its name and
+format do not guarantee full compatibility. This policy change does not require
+changing the current bake or shipped asset.
 
 It works because the character and the Quaternius Universal Animation Library share
 the **same skeleton** (identical bone names), so the library's animation channels
 can be rebound onto the character's bones.
 
 ## Run it
+
+Use the **Node bake as the sole supported pipeline**. It produces the current
+14-clip set, stable clip names, clothing, and physique in one shipped GLB.
+Do not introduce a second bake pipeline or expand the shipped clip set without
+explaining the need and getting approval first. Blender can still be used to
+author source assets; it is not an alternative production bake.
 
 ```bash
 npm run bake:anims        # -> models-src/agent-animated.glb     (intermediate, uncompressed)
@@ -22,10 +45,14 @@ the browser). Only the final `agent-dcl.glb` lands in `public/models/`.
 
 Outputs:
 
-| File                 | Location         | What it is                                   | Use                                                       |
-| -------------------- | ---------------- | -------------------------------------------- | --------------------------------------------------------- |
-| `agent-animated.glb` | `models-src/`    | character + embedded clips, **uncompressed** | intermediate; a decoder-free single file if you want it   |
-| `agent-dcl.glb`      | `public/models/` | same, **Draco** geometry compression         | **the shipped asset** — browser (via DRACOLoader) and DCL |
+These are two stages of the same pipeline, not competing character versions.
+Only the Draco-compressed final asset ships; the uncompressed intermediate is
+used for compression and the inspection commands below.
+
+| File                 | Location         | What it is                                   | Use                                                      |
+| -------------------- | ---------------- | -------------------------------------------- | -------------------------------------------------------- |
+| `agent-animated.glb` | `models-src/`    | character + embedded clips, **uncompressed** | intermediate for compression and inspection; not shipped |
+| `agent-dcl.glb`      | `public/models/` | same, **Draco** geometry compression         | **the shipped browser asset** (via DRACOLoader)          |
 
 Both are regenerated from `models-src/agent.glb` + `models-src/UAL2_Standard.glb`,
 so treat them as build artifacts — re-run after changing the source models or the
@@ -43,9 +70,10 @@ one of the agents"_. It is a stale asset, not a changed model. **Ctrl+Shift+R.**
 ## Which clips get baked
 
 Edit the `KEEP` set at the top of [`scripts/bake-animations.mjs`](../scripts/bake-animations.mjs)
-(or pass `--all` to embed every clip). Default is a brawler starter set:
+(the script also supports `--all`, but expanding the shipped set requires approval).
+The current set contains nine library clips plus five authored clips:
 `Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`,
-`OverhandThrow`, plus the three `NinjaJump_*` phases. Two of those are means, not
+`OverhandThrow`, plus the three `NinjaJump_*` phases.
 `Walk_Carry_Loop` does double duty — it is the source the authored clips are built
 from _and_ a shipped clip, renamed `Carry_Loop` via `RENAME`, as `OverhandThrow` is
 renamed `Throw`. Synthesis is **additive**: a recipe writes new names, it never
@@ -223,40 +251,30 @@ feels too high or floaty.
 4. **Rebind** every merged animation channel from the library's duplicate bone to
    the character's same-named bone.
 5. Dispose the library's leftover scene + orphan skeleton nodes.
-6. Synthesize `Walk` + `Run` and the `Carry_Overhead_*` pair (see above), then
-   apply `RENAME` so the library clips ship under their stable names.
-7. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
+6. Synthesize `Walk`, `Run`, the `Carry_Overhead_*` pair, and `Throw_Overhead`.
+7. Dress the character with `dressOutfit()`, then apply `bulkUp()` to its mesh.
+   These stages preserve the skeleton and animation clips.
+8. Apply `RENAME` so the library clips ship under their stable names.
+9. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
    one buffer, write the GLB.
 
-No Blender required. Validated on the current assets: 13 clips, 65 animated bones,
+No Blender required. Validated on the current assets: 14 clips, 65 animated bones,
 all channel targets resolve, single skin/skeleton.
 
-## Blender alternative
+## The single shipped asset
 
-If you'd rather use Blender (e.g. for mesh cleanup), the equivalent is
-[`scripts/bake-animations-blender.py`](../scripts/bake-animations-blender.py):
-
-```bash
-blender --background --python scripts/bake-animations-blender.py -- \
-  models-src/agent.glb models-src/UAL2_Standard.glb models-src/agent-animated.glb
-```
-
-It imports both, stashes the library's actions as NLA tracks on the character
-armature, deletes the library objects, and exports one GLB. Export flag names vary
-slightly by Blender version (3.6+ / 4.x).
-
-## The single shared asset
-
-**Browser and Decentraland use the same file, `agent-dcl.glb`.**
+**The browser currently ships `agent-dcl.glb`.** Reusing it in DCL is a best-effort
+option, not a project invariant or a guarantee of compatibility.
 
 - **Browser (this game):** `Game.js` already points `Player` at
   `/models/agent-dcl.glb` with no `animationUrl` (clips are embedded). The loader
   has a `DRACOLoader` wired up, decoding via the self-hosted decoder in
   `public/draco/`. Nothing else to configure.
-  - If you'd rather avoid the Draco decoder, point `modelUrl` at the uncompressed
-    `models-src/agent-animated.glb` instead (copy it into `public/models/` first so
-    it's served) — it needs no decoder.
-- **Decentraland (SDK7):** upload the same `agent-dcl.glb` and load it with
+- **Development only:** separate-library loading through `animationUrl` and
+  uncompressed-model testing are not production loading paths. Keep the shipped
+  configuration pointed at the single baked GLB with its embedded clips.
+- **Decentraland (SDK7), if a port is requested:** validate the asset against the
+  target scene's limits before reuse. A compatible GLB can be loaded with
   `GltfContainer.create(e, { src: 'models/agent-dcl.glb' })`, referencing clips by
   their exact names via `Animator` (e.g. `Idle_No_Loop`, `Walk`, `Run`). See
   [decentraland-asset-compat.md](./decentraland-asset-compat.md).

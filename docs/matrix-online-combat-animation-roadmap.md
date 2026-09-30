@@ -2,14 +2,14 @@
 
 This document records the hand-to-hand animation vocabulary that should
 eventually inform Agent Syndicate. The goal is not to reproduce every animation
-from *The Matrix Online* at once. It is to preserve the basic combat language now
+from _The Matrix Online_ at once. It is to preserve the basic combat language now
 and introduce more elaborate moves only after the underlying combat systems are
 ready.
 
 ## Research Scope
 
 No specific video URL or title was supplied for this reference. The list below
-is therefore reconstructed from archived official *Matrix Online* material, the
+is therefore reconstructed from archived official _Matrix Online_ material, the
 Prima guide, and the broad action categories visible in surviving combat footage.
 It should not be treated as a frame-by-frame inventory of one particular video.
 
@@ -58,32 +58,32 @@ These are the basic moves the game should acquire first. Most are verified
 categories rather than official ability names because Matrix Online generated
 many unnamed variants for ordinary exchanges.
 
-| Animation | Purpose | Confidence | Target phase |
-| --- | --- | --- | --- |
-| Combat idle | Ready stance with guarded hands | Verified category | MVP |
-| Guard transition | Enter and leave the combat stance | Project adaptation | MVP |
-| Lead jab | Fast opening strike | Verified category | MVP |
-| Rear cross | Strong straight follow-up | Verified category | MVP |
-| Hook punch | Circular finishing punch | Verified category | MVP |
-| Body punch | Mid-level strike with a folded reaction | Verified category | Phase 2 |
-| Front kick | Quick spacing attack | Verified category | MVP |
-| Side kick | Strong linear kick and knockback | Verified category | Phase 2 |
-| Roundhouse kick | Circular combo finisher | Verified category | Phase 2 |
-| Leg sweep | Low attack that causes knockdown | Project adaptation | Phase 2 |
-| High block | Deflect a head-level strike | Verified category | Phase 2 |
-| Body block | Absorb or redirect a middle strike | Verified category | Phase 2 |
-| Duck/weave | Avoid a high punch without leaving range | Verified category | Phase 2 |
-| Backstep dodge | Escape a heavy attack | Verified category | Phase 2 |
-| Punch reversal | Catch or redirect a punch into a counter | Verified name | Phase 3 |
-| Counter throw | Redirect an off-balance attacker | Verified name | Phase 3 |
-| Forward hit reaction | Snap or fold from a frontal hit | Verified category | MVP |
-| Head hit reaction | Sell a successful high strike | Verified category | MVP |
-| Body hit reaction | Sell a successful middle strike | Verified category | MVP |
-| Stagger | Remain standing but lose initiative | Verified category | MVP |
-| Knockback | Travel backward after a heavy hit | Verified category | MVP |
-| Knockdown | Fall to the floor after a finisher | Verified category | Phase 2 |
-| Ground recovery | Return from knockdown to combat idle | Project adaptation | Phase 2 |
-| Defeat | Final fall before the green-code effect | Project adaptation | MVP |
+| Animation            | Purpose                                  | Confidence         | Target phase |
+| -------------------- | ---------------------------------------- | ------------------ | ------------ |
+| Combat idle          | Ready stance with guarded hands          | Verified category  | MVP          |
+| Guard transition     | Enter and leave the combat stance        | Project adaptation | MVP          |
+| Lead jab             | Fast opening strike                      | Verified category  | MVP          |
+| Rear cross           | Strong straight follow-up                | Verified category  | MVP          |
+| Hook punch           | Circular finishing punch                 | Verified category  | MVP          |
+| Body punch           | Mid-level strike with a folded reaction  | Verified category  | Phase 2      |
+| Front kick           | Quick spacing attack                     | Verified category  | MVP          |
+| Side kick            | Strong linear kick and knockback         | Verified category  | Phase 2      |
+| Roundhouse kick      | Circular combo finisher                  | Verified category  | Phase 2      |
+| Leg sweep            | Low attack that causes knockdown         | Project adaptation | Phase 2      |
+| High block           | Deflect a head-level strike              | Verified category  | Phase 2      |
+| Body block           | Absorb or redirect a middle strike       | Verified category  | Phase 2      |
+| Duck/weave           | Avoid a high punch without leaving range | Verified category  | Phase 2      |
+| Backstep dodge       | Escape a heavy attack                    | Verified category  | Phase 2      |
+| Punch reversal       | Catch or redirect a punch into a counter | Verified name      | Phase 3      |
+| Counter throw        | Redirect an off-balance attacker         | Verified name      | Phase 3      |
+| Forward hit reaction | Snap or fold from a frontal hit          | Verified category  | MVP          |
+| Head hit reaction    | Sell a successful high strike            | Verified category  | MVP          |
+| Body hit reaction    | Sell a successful middle strike          | Verified category  | MVP          |
+| Stagger              | Remain standing but lose initiative      | Verified category  | MVP          |
+| Knockback            | Travel backward after a heavy hit        | Verified category  | MVP          |
+| Knockdown            | Fall to the floor after a finisher       | Verified category  | Phase 2      |
+| Ground recovery      | Return from knockdown to combat idle     | Project adaptation | Phase 2      |
+| Defeat               | Final fall before the green-code effect  | Project adaptation | MVP          |
 
 ## Verified Signature Moves
 
@@ -93,15 +93,15 @@ exactly.
 
 ### Kung Fu
 
-| Move | Archived description or character | Suggested game role | Target phase |
-| --- | --- | --- | --- |
-| Misdirect Punch | A deceptive punch that exploits a dazed opponent | Fast guard opener | Phase 2 |
-| Dim Mak Strike | A focused stunning and damaging strike | Precision heavy attack | Phase 3 |
-| Machinegun Fist Combo | A rapid sequence of punches | Multi-hit light finisher | Phase 2 |
-| Piston Kicks | Alternating acrobatic kicks | Showcase launcher/finisher | Phase 3 |
-| Suicidal Butterfly | High-level acrobatic Kung Fu attack | Risky area finisher | Phase 4 |
-| Extreme Falling Kick | High-level falling or aerial kick | Aerial heavy attack | Phase 4 |
-| Triple Front Kick | Repeating front-kick sequence | Forward combo finisher | Phase 3 |
+| Move                  | Archived description or character                | Suggested game role        | Target phase |
+| --------------------- | ------------------------------------------------ | -------------------------- | ------------ |
+| Misdirect Punch       | A deceptive punch that exploits a dazed opponent | Fast guard opener          | Phase 2      |
+| Dim Mak Strike        | A focused stunning and damaging strike           | Precision heavy attack     | Phase 3      |
+| Machinegun Fist Combo | A rapid sequence of punches                      | Multi-hit light finisher   | Phase 2      |
+| Piston Kicks          | Alternating acrobatic kicks                      | Showcase launcher/finisher | Phase 3      |
+| Suicidal Butterfly    | High-level acrobatic Kung Fu attack              | Risky area finisher        | Phase 4      |
+| Extreme Falling Kick  | High-level falling or aerial kick                | Aerial heavy attack        | Phase 4      |
+| Triple Front Kick     | Repeating front-kick sequence                    | Forward combo finisher     | Phase 3      |
 
 The archived official animation article specifically discusses **Piston Kicks**
 and **Machine Gun Fist** as examples of attacks whose names describe their visual
@@ -109,14 +109,14 @@ rhythm.
 
 ### Karate
 
-| Move | Archived description or character | Suggested game role | Target phase |
-| --- | --- | --- | --- |
-| Ki-Charged Punch | Powerful punch against a staggered opponent | Charged heavy punch | Phase 3 |
-| Sidekick Combo | Damaging kick combination | Heavy combo branch | Phase 2 |
-| Sky High Sidekick | Rising or high side kick that weakens a target | Launcher | Phase 3 |
-| Swirling Ki Summon | Close-range attack affecting nearby opponents | Crowd-control special | Phase 4 |
-| 540 Kick | Spinning aerial kick named by the stunt team | Showcase finisher | Phase 4 |
-| Machinegun Kick | High-level rapid kicking sequence | Multi-hit kick finisher | Phase 3 |
+| Move               | Archived description or character              | Suggested game role     | Target phase |
+| ------------------ | ---------------------------------------------- | ----------------------- | ------------ |
+| Ki-Charged Punch   | Powerful punch against a staggered opponent    | Charged heavy punch     | Phase 3      |
+| Sidekick Combo     | Damaging kick combination                      | Heavy combo branch      | Phase 2      |
+| Sky High Sidekick  | Rising or high side kick that weakens a target | Launcher                | Phase 3      |
+| Swirling Ki Summon | Close-range attack affecting nearby opponents  | Crowd-control special   | Phase 4      |
+| 540 Kick           | Spinning aerial kick named by the stunt team   | Showcase finisher       | Phase 4      |
+| Machinegun Kick    | High-level rapid kicking sequence              | Multi-hit kick finisher | Phase 3      |
 
 Karate should read as direct and forceful. Its attacks need strong anticipation,
 clear contact poses, and substantial defender recoil rather than excessive
@@ -124,12 +124,12 @@ flourish on every strike.
 
 ### Aikido
 
-| Move | Archived description or character | Suggested game role | Target phase |
-| --- | --- | --- | --- |
-| Counter Throw | Throw against an off-balance opponent | Parry reward | Phase 3 |
-| Maki-Otoshi | Counter that takes the opponent to the ground | Knockdown counter | Phase 3 |
-| Punch Reversal | Redirects an incoming punch | Defensive counter | Phase 3 |
-| Wrist Throw | High-damage redirection and throw | Advanced counter | Phase 4 |
+| Move           | Archived description or character             | Suggested game role | Target phase |
+| -------------- | --------------------------------------------- | ------------------- | ------------ |
+| Counter Throw  | Throw against an off-balance opponent         | Parry reward        | Phase 3      |
+| Maki-Otoshi    | Counter that takes the opponent to the ground | Knockdown counter   | Phase 3      |
+| Punch Reversal | Redirects an incoming punch                   | Defensive counter   | Phase 3      |
+| Wrist Throw    | High-damage redirection and throw             | Advanced counter    | Phase 4      |
 
 The guide OCR renders some names inconsistently. `Maki-Otoshi` is retained here
 as the normalized project spelling. Before commissioning a move under a historic
@@ -235,8 +235,12 @@ controls manageable.
 
 ## Animation Asset Requirements
 
-All shipped character clips must remain embedded in the shared
-`public/models/agent-dcl.glb` so the browser and Decentraland use the same asset.
+The browser currently ships character clips embedded in
+`public/models/agent-dcl.glb`. Full DCL compatibility is no longer required;
+preserve it where practical, but do not rewrite code or rebake assets solely to
+restore it today. Browser-only moves and assets are acceptable. Keep the current
+pipeline unless the requested feature needs a change; DCL parity is not an
+acceptance criterion. See [decentraland-asset-compat.md](decentraland-asset-compat.md).
 
 Artist-authored clips should follow these rules:
 
@@ -249,8 +253,9 @@ Artist-authored clips should follow these rules:
 - Provide mirrored or alternate variants only after the primary move works.
 - Keep attacker and victim clips at matching duration for synchronized moves.
 - Mark a clear contact frame in the delivery notes for combat timing.
-- Export one GLB with embedded clips and Draco-compatible geometry.
-- Do not use Meshopt or KTX2 for this shared character asset.
+- For the current bake, export one GLB with embedded clips and Draco-compatible geometry.
+- Meshopt/KTX2 would need browser pipeline support and would limit DCL reuse;
+  do not introduce or remove them solely for DCL parity.
 
 Suggested project clip names:
 

@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file, which follows
 
 ## [Unreleased]
 
+### Changed
+
+- The project is now browser-first: full Decentraland compatibility is no longer
+  required. Documentation and AI guidance retain compatibility as a best-effort
+  goal, without requiring code rewrites or asset rebakes solely to restore it.
+
+### Removed
+
+- The incomplete Blender animation bake and its documentation as an equivalent
+  alternative. Node is now the sole supported bake pipeline, retaining the
+  existing 14 shipped clips, clothing, and physique. Adding another pipeline or
+  expanding the shipped clip set requires approval first.
+
 ## [0.5.3] - 2026-09-25
 
 ### Added
