@@ -20,10 +20,34 @@ two attack at once, reinforcements grow the crowd to seven, and defeated agents
 return after a short delay. Survive as long as possible, then press **R** or tap
 **HIT** to retry.
 
+Handles keep your uppercase and lowercase letters when saved and shown on the
+leaderboard. **LEETIFY** converts either case to digits where supported and
+preserves the other letters' case (for example, `cipherRunner` becomes
+`c1ph3rRunn3r`). Handles still use 2–14 characters.
+
 On a touch device, use the **left stick** for camera-relative movement. Push it to
 the outer ring to sprint, drag open space on the right side to orbit the camera,
 and use the separate **JUMP** and **HIT** buttons for actions. Keyboard and mouse
 controls remain available on hybrid devices.
+
+<details>
+<summary>Desktop easter egg (spoiler)</summary>
+
+During an active run, type **101** to toggle short-throw mode. Pick up the car
+with **E**, then use **J** or **E** to throw it about **3–5 meters** ahead on
+level ground. The carrying prompt shows **SHORT THROW** while enabled. Type
+**101** again to restore the normal throw; restarting also turns it off.
+
+The code requires a desktop-style fine pointer with hover support. It is ignored
+on touch/mobile devices, in text fields, while paused, and after game over.
+Use consecutive digits (top row or numpad); other keys, losing focus, or opening
+a menu clear an unfinished code. Touch throws always remain normal, including
+on hybrid devices. No mobile cheat button or text entry is added.
+
+Regression check: `node scripts/check-short-throw.mjs` covers the keyboard guards,
+throw timing, range at multiple frame rates, collision restoration, and damage.
+
+</details>
 
 The HUD automatically shows the desktop or touch control mapping based on the
 detected pointer. Its **KEYS / TOUCH** button can switch the displayed mapping for

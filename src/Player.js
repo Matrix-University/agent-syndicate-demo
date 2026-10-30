@@ -78,12 +78,13 @@ export class Player {
     this._punchTime = ATTACK_PROFILE.fists.duration;
     this._punchHitConsumed = true;
 
-    // Carried prop (a LiftableCar). Player only needs lift(player)/launch(dir)
+    // Carried prop (a LiftableCar). Player only needs lift(player)/launch(dir, shortThrow)
     // from it — it owns its own visuals, physics and collider.
     this.carry = null;
     this._liftTime = LIFT_DURATION;
     this._throwTime = THROW_PROFILE.duration;
     this._throwReleased = true;
+    this._shortThrow = false;
     this._throwDir = new THREE.Vector3();
     this.maxHealth = opts.maxHealth ?? 5;
     this.health = this.maxHealth;
@@ -240,7 +241,9 @@ export class Player {
     // both offer LIFT/THROW, and Game only spends liftPressed on a pickup when
     // the hands are empty, so the two readings can't collide.
     const carrying = this.carrying;
-    if (carrying && (input.punchPressed || input.liftPressed)) this.startThrow();
+    if (carrying && (input.punchPressed || input.liftPressed)) {
+      this.startThrow(input.shortThrowPressed);
+    }
     const lifting = this._liftTime < LIFT_DURATION;
     const throwing = this._throwTime < THROW_PROFILE.duration;
     const handsFull = carrying || lifting || throwing;
@@ -375,7 +378,7 @@ export class Player {
     return this._liftTime < LIFT_DURATION || this._throwTime < THROW_PROFILE.duration;
   }
 
-  // Take hold of a liftable prop. It only has to offer lift(player)/launch(dir).
+  // Take hold of a liftable prop. It offers lift(player)/launch(dir, shortThrow).
   startLift(prop) {
     const canLift = !this.carry && this.grounded && !this.busyWithProp &&
       this._punchTime >= this._attackProfile.duration && !this.anim?.acting;
@@ -387,11 +390,13 @@ export class Player {
   }
 
   // Heave it: the prop leaves the hands partway through the clip (_releaseCarry).
-  startThrow() {
+  startThrow(shortThrow = false) {
     const canThrow = !!this.carry && !this.busyWithProp;
     if (!canThrow) return false;
     this._throwTime = 0;
     this._throwReleased = false;
+    // Latch at wind-up so toggling the cheat cannot change a throw mid-animation.
+    this._shortThrow = shortThrow;
     this.anim?.playAction('throw', THROW_PROFILE.clipRate);
     return true;
   }
@@ -412,7 +417,7 @@ export class Player {
     this.carry = null;
     // Facing is the throw direction — same forward convention as CombatSystem.
     this._throwDir.set(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y));
-    prop?.launch(this._throwDir);
+    prop?.launch(this._throwDir, this._shortThrow);
   }
 
   takeDamage(amount) {

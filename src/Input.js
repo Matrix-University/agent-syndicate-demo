@@ -12,9 +12,19 @@ export class Input {
     this._mobilePunchPressed = false;
     this._mobileJumpPressed = false;
     this._mobileLiftPressed = false;
+    this._shortThrowAllowed = false;
+    this._shortThrowEnabled = false;
+    this._shortThrowSequence = 0;
+    this._desktopPointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+    this._onDesktopPointerChange = () => {
+      this._shortThrowEnabled = false;
+      this._shortThrowSequence = 0;
+    };
+    this._desktopPointer.addEventListener('change', this._onDesktopPointerChange);
 
     this._onKeyDown = (e) => {
       if (this.suspended) return;
+      this._trackShortThrowCode(e);
       if (!this.keys.has(e.code)) this._pressed.add(e.code); // ignore auto-repeat
       this.keys.add(e.code);
     };
@@ -74,9 +84,37 @@ export class Input {
     if (suspended) this.reset();
   }
 
+  setShortThrowAllowed(allowed) {
+    this._shortThrowAllowed = allowed;
+    this._shortThrowEnabled = false;
+    this._shortThrowSequence = 0;
+  }
+
+  _trackShortThrowCode(event) {
+    const editing = event.target instanceof HTMLElement &&
+      (event.target.isContentEditable || event.target.closest('input, textarea, select'));
+    if (!this._shortThrowAllowed || !this._desktopPointer.matches || editing ||
+      event.isComposing || event.defaultPrevented ||
+      event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+      this._shortThrowSequence = 0;
+      return;
+    }
+    if (event.repeat || this.keys.has(event.code)) return;
+
+    const expected = this._shortThrowSequence === 1 ? '0' : '1';
+    this._shortThrowSequence = event.key === expected
+      ? this._shortThrowSequence + 1
+      : event.key === '1' ? 1 : 0;
+    if (this._shortThrowSequence === 3) {
+      this._shortThrowEnabled = !this._shortThrowEnabled;
+      this._shortThrowSequence = 0;
+    }
+  }
+
   reset() {
     this.keys.clear();
     this._pressed.clear();
+    this._shortThrowSequence = 0;
     this.resetMobileMovement();
     this._mobilePunchPressed = false;
     this._mobileJumpPressed = false;
@@ -87,6 +125,7 @@ export class Input {
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
     window.removeEventListener('blur', this._onBlur);
+    this._desktopPointer.removeEventListener('change', this._onDesktopPointerChange);
     this.reset();
   }
 
@@ -120,6 +159,16 @@ export class Input {
   // Pick up whatever liftable prop is in range.
   get liftPressed() {
     return this.wasPressed('KeyE') || this._mobileLiftPressed;
+  }
+
+  get shortThrow() {
+    return this._shortThrowEnabled && this._shortThrowAllowed &&
+      !this.suspended && this._desktopPointer.matches;
+  }
+
+  get shortThrowPressed() {
+    // Touch attack/lift intents always keep the normal throw, even on a hybrid.
+    return this.shortThrow && this.wasPressed('KeyJ', 'KeyE');
   }
 
   get restartPressed() {

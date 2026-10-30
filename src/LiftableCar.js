@@ -34,6 +34,9 @@ const THROW_WINDUP_AT = 0.64;
 
 const THROW_SPEED = 30;
 const THROW_LIFT = 7;
+// Including the 1.9 m hand reach, this lands about 4 m ahead on level ground.
+const SHORT_THROW_SPEED = 4;
+const SHORT_THROW_LIFT = 1.5;
 const THROW_SPIN = 4.5;   // rad/s tumble
 const GRAVITY = 26;       // matches Player.gravity so the arc reads the same
 const WALL_BOUNCE = -0.22;
@@ -133,13 +136,13 @@ export class LiftableCar {
   }
 
   // Released mid-throw: back into world space with a ballistic arc and a tumble.
-  launch(direction) {
+  launch(direction, shortThrow = false) {
     this._scene.attach(this.root);
     this.state = 'flying';
     this._struck.clear();
     this.previousPosition.copy(this.root.position);
-    this.velocity.copy(direction).multiplyScalar(THROW_SPEED);
-    this.velocity.y += THROW_LIFT;
+    this.velocity.copy(direction).multiplyScalar(shortThrow ? SHORT_THROW_SPEED : THROW_SPEED);
+    this.velocity.y += shortThrow ? SHORT_THROW_LIFT : THROW_LIFT;
   }
 
   // Enemies are hit once per throw; CombatSystem asks before applying damage.

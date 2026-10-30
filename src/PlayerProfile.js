@@ -24,23 +24,22 @@ export function ordinal(index) {
 }
 
 // Leetspeak alphabet plus the bracket glyphs handles get dressed up with.
-const DISALLOWED = /[^A-Z0-9_\-.[\]|^<>+*]/g;
+const DISALLOWED = /[^A-Za-z0-9_\-.[\]|^<>+*]/g;
 const LEET = { A: '4', B: '8', E: '3', G: '6', I: '1', O: '0', S: '5', T: '7', Z: '2' };
 
 const HANDLE_STEMS = ['NEO', 'GHOST', 'CIPHER', 'RAZOR', 'VIRUS', 'STATIC', 'KERNEL', 'ZERO'];
 const HANDLE_TAILS = ['RUNNER', 'BYTE', 'WIRE', 'PHREAK', 'DAEMON', 'CRASH', 'NULL', 'ROOT'];
 
-/** Uppercases, drops anything outside the handle alphabet, and trims to length. */
+/** Preserves case, drops anything outside the handle alphabet, and trims to length. */
 export function sanitizeHandle(raw) {
   return String(raw ?? '')
-    .toUpperCase()
     .replace(DISALLOWED, '')
     .slice(0, HANDLE_MAX_LENGTH);
 }
 
 /** Rewrites a sanitized handle in leetspeak — the "make it hacker" button. */
 export function leetify(raw) {
-  return sanitizeHandle(raw).replace(/[ABEGIOSTZ]/g, (letter) => LEET[letter]);
+  return sanitizeHandle(raw).replace(/[ABEGIOSTZ]/gi, (letter) => LEET[letter.toUpperCase()]);
 }
 
 export function suggestHandle() {

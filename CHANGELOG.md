@@ -19,6 +19,20 @@ All notable changes to this project are documented in this file, which follows
   existing 14 shipped clips, clothing, and physique. Adding another pipeline or
   expanding the shipped clip set requires approval first.
 
+## [0.7.0] - 2026-10-30
+
+### Added
+
+- A desktop-only short-throw easter egg: type `101` during a run to toggle
+  3–5 meter car throws with J or E. Restarting disables the mode, and mobile
+  throws remain unchanged.
+
+### Changed
+
+- Handles now preserve uppercase and lowercase letters in saved profiles and
+  leaderboards. LEETIFY converts either case while keeping the case of letters
+  it does not replace.
+
 ## [0.6.0] - 2026-10-30
 
 ### Changed

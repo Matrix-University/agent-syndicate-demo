@@ -32,6 +32,8 @@ const KEYS = {
   KeyS: { key: 's', vk: 83 }, KeyD: { key: 'd', vk: 68 },
   KeyJ: { key: 'j', vk: 74 }, KeyE: { key: 'e', vk: 69 },
   KeyR: { key: 'r', vk: 82 }, KeyM: { key: 'm', vk: 77 }, KeyP: { key: 'p', vk: 80 },
+  Digit0: { key: '0', vk: 48 }, Digit1: { key: '1', vk: 49 },
+  Numpad0: { key: '0', vk: 96 }, Numpad1: { key: '1', vk: 97 },
   Space: { key: ' ', vk: 32 },
   ShiftLeft: { key: 'Shift', vk: 16, modifiers: 8 },
   ArrowUp: { key: 'ArrowUp', vk: 38 }, ArrowDown: { key: 'ArrowDown', vk: 40 },

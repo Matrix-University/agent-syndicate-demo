@@ -213,6 +213,7 @@ export class Game {
   }
 
   start() {
+    this.input.setShortThrowAllowed(true);
     this.renderer.setAnimationLoop(this._loop);
     // Fire and forget: the HUD shows the local board until this lands, then
     // repaints with the global one.
@@ -451,7 +452,9 @@ export class Game {
   _updateLiftPrompt() {
     let text = '';
     if (this.gameOver || this.player.busyWithProp) text = '';
-    else if (this.player.carrying) text = 'J / LIFT — THROW THE CAR';
+    else if (this.player.carrying) {
+      text = this.input.shortThrow ? 'J / E — SHORT THROW THE CAR' : 'J / LIFT — THROW THE CAR';
+    }
     else if (this.liftableCar.canLift(this.player)) text = 'E / LIFT — PICK UP THE CAR';
 
     if (text !== this._liftPromptText) {
@@ -469,6 +472,7 @@ export class Game {
 
   _endGame() {
     this.gameOver = true;
+    this.input.setShortThrowAllowed(false);
     this._downTime = 0;
     const count = this.enemyManager.defeated;
     const seconds = this.sessionTime;
@@ -522,6 +526,7 @@ export class Game {
 
   _restart() {
     this.gameOver = false;
+    this.input.setShortThrowAllowed(true);
     document.body.classList.remove('game-over-visible');
     this._downTime = 0;
     this.sessionTime = 0;

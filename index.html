@@ -1357,7 +1357,6 @@
       #handle-gate[hidden] { display: none; }
       #handle-gate-input {
         letter-spacing: 3px;
-        text-transform: uppercase;
       }
       #handle-gate-actions { display: flex; gap: 8px; }
       #handle-gate-actions button { flex: 1; }
@@ -1484,7 +1483,7 @@
       <div id="handle-gate-panel">
         <h1 id="handle-gate-title">CHOOSE YOUR HANDLE</h1>
         <p id="handle-gate-copy">
-          Pick the name the grid will know you by. Letters, digits and
+          Pick the name the grid will know you by. Uppercase or lowercase letters, digits and
           <span aria-hidden="true">_ - . [ ] | ^ &lt; &gt;</span> only — hit LEETIFY
           to translate it, or leave it blank to take the suggestion.
         </p>
@@ -1495,7 +1494,7 @@
             type="text"
             name="handle"
             autocomplete="off"
-            autocapitalize="characters"
+            autocapitalize="off"
             spellcheck="false"
             maxlength="14"
           />
