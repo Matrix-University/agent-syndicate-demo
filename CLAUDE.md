@@ -158,8 +158,9 @@ is UAL2's male `Mannequin` — the body the clips were authored on. Keep it: eve
 clip carries that skeleton's bone translations, so any other body gets stretched
 to fit (the female mannequin that shipped before had its arms pulled 24% long).
 `scripts/lib/outfit.mjs` dresses it as the player from
-`docs/image references/AGENT_HULK_SHEET.png` (white two-button suit, black shirt,
-gold tie, belt, blond shoulder-length hair, stubble, aviators). It splits the
+`docs/image references/2026-10-30 Muscular_Blond_Suit_Character_Sheet.png`
+(yellow two-button suit, white shirt, gold tie, black belt, blond
+shoulder-length hair, stubble, dark aviators). It splits the
 skinned mesh into region materials by bone, then raycasts everything else on as
 thin skinned overlays, each vertex weighted like the surface under it (shirt V,
 tie, lapels, collar, buttons, pockets, seams, face, pads, hair); only the aviators

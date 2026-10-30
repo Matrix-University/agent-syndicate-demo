@@ -39,7 +39,8 @@ the _existing_ body. No sunglasses, no hairstyle, no muscle silhouette — just 
 ### Level 1½ — Dress the mannequin in the bake (what ships today)
 
 `scripts/lib/outfit.mjs` runs inside `npm run bake:anims:dcl` and dresses the
-existing mesh as the player from `image references/AGENT_HULK_SHEET.png`, then
+existing mesh as the player from
+`image references/2026-10-30 Muscular_Blond_Suit_Character_Sheet.png`, then
 `scripts/lib/physique.mjs` builds it up into a bodybuilder, embedding the look
 in the one GLB:
 

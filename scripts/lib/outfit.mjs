@@ -1,8 +1,8 @@
 // Dresses the mannequin as the player character from
-// docs/image references/AGENT_HULK_SHEET.png: a white two-button suit with
-// notched lapels, flap pockets and a vented back over a black shirt and gold
-// tie, a black belt with a gold buckle, black shoes, blond shoulder-length hair
-// and gold aviators.
+// docs/image references/2026-10-30 Muscular_Blond_Suit_Character_Sheet.png: a
+// yellow two-button suit with notched lapels, flap pockets and a vented back
+// over a white shirt and gold tie, a black belt with a gold buckle, black shoes,
+// blond shoulder-length hair and dark aviators.
 //
 // It works on the bind pose, inside the bake, so the look ships in the same
 // agent-dcl.glb the browser and Decentraland both load — no runtime tinting.
@@ -26,13 +26,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 // Authored in sRGB, like the sheet; converted to glTF's linear factors below.
 const MATERIALS = {
-  suit: { color: [0.93, 0.93, 0.9], roughness: 0.72, metallic: 0 },
-  // Lapels, flaps, buttons and creases: the suit's cloth a shade apart.
-  trim: { color: [0.8, 0.8, 0.76], roughness: 0.5, metallic: 0 },
-  // Hem, vent, back seam and lapel edges: the lines a white suit reads by.
-  seam: { color: [0.5, 0.5, 0.48], roughness: 0.85, metallic: 0 },
-  // Shirt front, collar, cuffs and belt.
-  shirt: { color: [0.035, 0.035, 0.04], roughness: 0.55, metallic: 0 },
+  suit: { color: [1, 0.78, 0.02], roughness: 0.72, metallic: 0 },
+  // Lapels, flaps, buttons and creases: a deeper gold against the yellow cloth.
+  trim: { color: [0.88, 0.6, 0.015], roughness: 0.5, metallic: 0 },
+  // Hem, vent, back seam and lapel edges keep the yellow suit's lines readable.
+  seam: { color: [0.58, 0.36, 0.015], roughness: 0.85, metallic: 0 },
+  // Shirt front, collar and cuffs.
+  shirt: { color: [0.94, 0.94, 0.9], roughness: 0.78, metallic: 0 },
+  belt: { color: [0.025, 0.025, 0.03], roughness: 0.55, metallic: 0 },
   // Satin and gold stay mostly dielectric: the game lights by lamps alone, and
   // a fully metallic surface with no environment to reflect renders black.
   tie: { color: [0.86, 0.66, 0.14], roughness: 0.3, metallic: 0.2 },
@@ -148,7 +149,7 @@ export function dressOutfit(doc) {
     shirtFront(surface, layer('shirt'));
     cuffs(surface, layer('shirt'), joints);
     collar(surface, layer('shirt'));
-    belt(surface, layer('shirt'));
+    belt(surface, layer('belt'));
     tie(surface, layer('tie'));
     lapels(surface, layer('trim'));
     buttons(surface, layer('trim'));
@@ -634,7 +635,7 @@ function pads(surface, overlay) {
   }
 }
 
-// The lines a white suit is read by: lapel edges, the fronts' cutaway, the hem,
+// The lines the suit is read by: lapel edges, the fronts' cutaway, the hem,
 // the flaps' lower edges, and the back seam and vent.
 function seams(surface, overlay) {
   const inCutaway = (p) => p.z > 0 && Math.abs(p.x) < edgeAt(CUTAWAY_EDGE, p.y);

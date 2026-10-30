@@ -6,7 +6,7 @@
   },
   "description": "Agent syndicate Game",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

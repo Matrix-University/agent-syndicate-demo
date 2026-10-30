@@ -162,8 +162,8 @@ console.log(
 );
 
 // The mannequin ships dressed as the player (docs/image references/
-// AGENT_HULK_SHEET.png). Mesh and materials only — the skeleton the clips bind
-// to is untouched.
+// 2026-10-30 Muscular_Blond_Suit_Character_Sheet.png). The bake changes only
+// mesh and materials, not the skeleton the clips bind to.
 const outfit = dressOutfit(charDoc);
 console.log(
   `Dressed the character: ${Object.entries(outfit.triangles)

@@ -19,6 +19,13 @@ All notable changes to this project are documented in this file, which follows
   existing 14 shipped clips, clothing, and physique. Adding another pipeline or
   expanding the shipped clip set requires approval first.
 
+## [0.6.0] - 2026-10-30
+
+### Changed
+
+- The player's outfit colors now match the updated character reference, with a
+  yellow suit and white shirt.
+
 ## [0.5.3] - 2026-09-25
 
 ### Added
