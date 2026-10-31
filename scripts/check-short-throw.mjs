@@ -46,11 +46,14 @@ const combat = new CombatSystem();
 try {
   type('101');
   assert.equal(input.shortThrow, false, 'code ignored before gameplay');
+  assert.equal(input.shortThrowUsed, false, 'ignored code cannot mark a run');
   input.setShortThrowAllowed(true);
   type('101');
   assert.equal(input.shortThrow, true, 'code toggles on across frames');
+  assert.equal(input.shortThrowUsed, true, 'activation marks the run');
   type('101');
   assert.equal(input.shortThrow, false, 'code toggles off');
+  assert.equal(input.shortThrowUsed, true, 'turning off cannot erase use');
   type('10w1');
   assert.equal(input.shortThrow, false, 'other keys interrupt the code');
   input.reset();
@@ -107,10 +110,12 @@ try {
   input.reset();
   type('101');
   input.setShortThrowAllowed(false);
+  assert.equal(input.shortThrowUsed, true, 'game over preserves use for the score');
   type('101');
   assert.equal(input.shortThrow, false, 'game over disables and clears the mode');
   input.setShortThrowAllowed(true);
   assert.equal(input.shortThrow, false, 'restart defaults to normal');
+  assert.equal(input.shortThrowUsed, false, 'retry starts an unmarked run');
   console.log('PASS: keyboard sequence, typing guards, pause, blur, restart, touch exclusion');
 
   for (const dt of [1 / 120, 1 / 60, 1 / 30, 0.05]) {

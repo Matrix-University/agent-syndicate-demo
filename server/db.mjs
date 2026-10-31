@@ -47,8 +47,10 @@ const SCHEMA = [
      kills integer not null,
      seconds real not null,
      email text,
+     used_cheat boolean not null default false,
      recorded_at timestamptz not null default now()
    )`,
+  `alter table high_scores add column if not exists used_cheat boolean not null default false`,
   `create index if not exists high_scores_rank
      on high_scores (kills desc, seconds asc, recorded_at asc)`,
   // Level 2's pending codes. In-process state would be wrong here: each request

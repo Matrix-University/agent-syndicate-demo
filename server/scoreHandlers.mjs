@@ -28,10 +28,12 @@ function validate(body) {
   if (!Number.isInteger(kills) || kills < 1 || kills > MAX_KILLS) return null;
   if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_SECONDS) return null;
   if (seconds < kills * MIN_SECONDS_PER_KILL) return null;
+  if (body?.usedCheat !== undefined && typeof body.usedCheat !== 'boolean') return null;
   return {
     kills,
     seconds: Math.round(seconds * 10) / 10,
     handle: sanitizeHandle(body?.handle) || 'ANON',
+    usedCheat: body?.usedCheat === true,
   };
 }
 

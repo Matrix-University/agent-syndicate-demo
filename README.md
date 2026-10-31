@@ -2,6 +2,68 @@
 
 A third-person seed for the brawler demo: a movable character with an animation state machine, a follow camera, and a blockout arena. The character is a placeholder built from primitives so the project runs with zero external assets; swap it for a Mixamo model when you're ready (see below).
 
+## Feature list
+
+Features already implemented in the browser prototype. Planned story scenes and
+ideas later in this document are not part of this list.
+
+### Gameplay
+
+- **Third-person movement:** camera-relative walking, sprinting, backing up,
+  jumping, and a smooth follow camera.
+- **Garage arena:** a playable parking garage with collision against the
+  environment and parked vehicles.
+- **Animated characters:** the muscular, yellow-suited player and suited System
+  Agents, with movement, attacks, and hit reactions. A procedural player
+  fallback keeps the game playable if the character model fails to load.
+- **Melee combat:** punches, enemy strikes, health, brief protection after a hit,
+  and green-code bursts when agents are defeated.
+- **Crowd combat:** five starting agents, up to two attacking at once,
+  reinforcements up to seven, and returning enemies after defeat. Reinforcements
+  and respawns run down the entry ramp, routing around landed cars that block
+  the entrance; spawning remains endless.
+- **Agent roster:** black flat-top, brown side-part, blonde crop, red crest, and
+  bald agents share the same body size and combat stats.
+- **Car lifting and throwing:** pick up the car by the entry ramp, carry it
+  overhead, and throw it into agents. The landing also hits nearby agents, once
+  per agent per throw. Each landing compresses the car's silhouette (up to three
+  damage levels); it stays usable, and retry restores it.
+- **Desktop short-throw easter egg:** an optional shorter car throw, with normal
+  throwing preserved on touch devices.
+- **Health regeneration:** a hidden three-minute damage-free delay, followed by
+  10% of maximum health every 30 seconds (first heal at 3:30). Running and
+  attacking are allowed; taking damage resets the wait. Menus freeze the timer,
+  health caps at full, and defeated players cannot regenerate.
+- **Objectives and retry:** defeat-count progress, a car objective prompt after
+  three defeats, a game-over summary, and restarting the run.
+
+### Controls and player experience
+
+- **Desktop and touch controls:** keyboard movement and actions, camera orbit,
+  a touch joystick with a sprint zone, and contextual jump, hit, lift, and throw
+  buttons.
+- **Responsive HUD:** health, objectives, session stats, desktop/touch control
+  legends, and remembered show/hide controls for instructions.
+- **Pause menu:** resume, restart, edit a handle, radio controls, and automatic
+  pause when the tab is hidden.
+- **Saved device settings:** a left-handed touch layout and optional hit
+  vibration where supported.
+- **Player handles:** saved, editable, case-preserving names with suggestions
+  and a LEETIFY action.
+- **High scores:** live kill and session-time readouts, a persistent local board,
+  and a shared board when the API is available. More kills rank higher; shorter
+  sessions break ties.
+- **Radio Free Zion:** the in-game RFZAMP radio player, with a compact mobile
+  control and the full player in the pause menu.
+
+### Optional server features
+
+- **Email gate:** off, collect-only, or six-digit verification through
+  self-hosted SMTP, with remembered sessions for returning players.
+- **Admin dashboard:** sign-in, an email-collection toggle, and CSV export.
+- **Persistence and hosting:** file-backed storage for a local Node server or
+  Postgres-backed storage for deployment, including Vercel API support.
+
 ## Run it
 
 Requires [Node.js](https://nodejs.org) (20.6+, for `process.loadEnvFile`).
@@ -20,6 +82,20 @@ two attack at once, reinforcements grow the crowd to seven, and defeated agents
 return after a short delay. Survive as long as possible, then press **R** or tap
 **HIT** to retry.
 
+Health quietly regenerates after **3 minutes without taking damage**: the first
+tick restores **10% of maximum health at 3:30**, then another 10% every
+**30 seconds**, up to full health. Moving, running, and attacking do not interrupt
+it; only taking damage restarts the wait. Pausing or opening the handle prompt
+freezes the timer. There is no countdown on the HUD, and regeneration cannot revive
+a defeated player. Retrying starts a fresh timer.
+
+Regression check: `node scripts/check-health-regen.mjs`.
+
+Ramp regression check: `node scripts/check-ramp-regressions.mjs` covers downhill
+jump/punch/pickup, ledge falls, and seven-agent arrivals around blocked entrances
+at four frame rates. The browser driver's `script` mode can run
+`scripts/check-ramp-browser.txt` against the rendered garage.
+
 Handles keep your uppercase and lowercase letters when saved and shown on the
 leaderboard. **LEETIFY** converts either case to digits where supported and
 preserves the other letters' case (for example, `cipherRunner` becomes
@@ -37,6 +113,9 @@ During an active run, type **101** to toggle short-throw mode. Pick up the car
 with **E**, then use **J** or **E** to throw it about **3–5 meters** ahead on
 level ground. The carrying prompt shows **SHORT THROW** while enabled. Type
 **101** again to restore the normal throw; restarting also turns it off.
+Activating the code adds a **POTENTIAL** subtitle beneath your handle on that
+run's local and shared high-score entries, even if you turn it off again. Your
+handle stays unchanged on the board, and the next run starts unmarked.
 
 The code requires a desktop-style fine pointer with hover support. It is ignored
 on touch/mobile devices, in text fields, while paused, and after game over.
@@ -46,8 +125,19 @@ on hybrid devices. No mobile cheat button or text entry is added.
 
 Regression check: `node scripts/check-short-throw.mjs` covers the keyboard guards,
 throw timing, range at multiple frame rates, collision restoration, and damage.
+`node scripts/check-arcade-features.mjs` checks the roster, ramp traversal,
+landing damage, retry, and POTENTIAL score submission.
+`node scripts/check-score-subtitles.mjs` checks subtitle rendering, API validation,
+and local-file/remote-client round trips without touching a configured database.
+The database backend adds a `used_cheat` flag automatically on first use. Older
+rows without that flag have no subtitle; names previously saved as POTENTIAL
+cannot be restored automatically because their original handles were not stored.
 
 </details>
+
+Delivery status, confirmed decisions, and the remaining feature backlog are in
+[the feature handoff](docs/feature-delivery-plan.md). The current arcade loop has
+no escape victory or 101-spawn cap.
 
 The HUD automatically shows the desktop or touch control mapping based on the
 detected pointer. Its **KEYS / TOUCH** button can switch the displayed mapping for

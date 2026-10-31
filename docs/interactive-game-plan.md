@@ -1,5 +1,10 @@
 # Interactive Game Plan
 
+> Historical story concepts, not the current arcade requirements. The arcade
+> stays endless; escape endings and a 101-spawn cap are deferred. See the
+> [current delivery plan and handoff](feature-delivery-plan.md) for implemented
+> slices, confirmed decisions, verification, and the remaining backlog.
+
 This document outlines what the prototype may need to become an interactive
 game based on the story described in the project README. The playable demo
 starts with **Scene 2**, after the Twins have already combined into the Hulk-sized

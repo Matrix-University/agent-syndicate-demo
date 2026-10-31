@@ -25,6 +25,9 @@ const CAR_MODELS = [
 // and the collider there). It is the bay nearest the entry ramp, so the pickup is
 // a landmark you run *to* rather than something underfoot at spawn.
 export const LIFTABLE_CAR_SLOT = Object.freeze({ x: -19, z: -41, yaw: Math.PI / 2 });
+export const ENTRY_RAMP = Object.freeze({
+  halfWidth: 5.25, topZ: -52, bottomZ: -44, height: 1.6,
+});
 
 function garageHalfWidthAt(z) {
   if (z >= CHAMFER_START_Z) return GARAGE_HALF_WIDTH;
@@ -101,8 +104,21 @@ export class World {
     pos.x = THREE.MathUtils.clamp(pos.x, -halfWidth + radius, halfWidth - radius);
   }
 
+  floorHeight(pos) {
+    const ramp = ENTRY_RAMP;
+    if (Math.abs(pos.x) > ramp.halfWidth || pos.z < ramp.topZ || pos.z > ramp.bottomZ) return 0;
+    return ramp.height * (ramp.bottomZ - pos.z) / (ramp.bottomZ - ramp.topZ);
+  }
+
+  canFollowFloor(fromX, fromZ, to) {
+    const ramp = ENTRY_RAMP;
+    // The ramp joins the floor at its foot, but its sides and top are ledges.
+    return Math.abs(fromX) <= ramp.halfWidth && fromZ >= ramp.topZ && fromZ <= ramp.bottomZ &&
+      Math.abs(to.x) <= ramp.halfWidth && to.z >= ramp.topZ;
+  }
+
   groundHeight(pos) {
-    let height = 0;
+    let height = this.floorHeight(pos);
     for (const collider of this.colliders) {
       const standable = !collider.disabled && collider.height !== undefined &&
         Math.abs(pos.x - collider.x) <= collider.hx &&
@@ -481,11 +497,20 @@ export function buildWorld(scene) {
   entrancePortal.position.set(0, 2.9, -54.04);
   scene.add(entrancePortal);
 
+  const rampDepth = ENTRY_RAMP.bottomZ - ENTRY_RAMP.topZ;
+  const rampGeometry = new THREE.BoxGeometry(ENTRY_RAMP.halfWidth * 2, 0.08, rampDepth);
+  const rampVertices = rampGeometry.attributes.position;
+  for (let i = 0; i < rampVertices.count; i += 1) {
+    rampVertices.setY(i, rampVertices.getY(i) - 0.04 +
+      ENTRY_RAMP.height * (0.5 - rampVertices.getZ(i) / rampDepth));
+  }
+  rampGeometry.computeVertexNormals();
   const entryApron = new THREE.Mesh(
-    new THREE.BoxGeometry(10.5, 0.035, 10),
+    rampGeometry,
     new THREE.MeshStandardMaterial({ color: 0x262c29, roughness: 0.88, metalness: 0.06 })
   );
-  entryApron.position.set(0, 0.018, -49);
+  entryApron.position.set(0, 0, (ENTRY_RAMP.topZ + ENTRY_RAMP.bottomZ) / 2);
+  entryApron.name = 'entry-ramp';
   entryApron.receiveShadow = true;
   scene.add(entryApron);
 

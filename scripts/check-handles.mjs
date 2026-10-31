@@ -56,6 +56,21 @@ try {
   assert.equal(new PlayerProfile().best.handle, 'c1ph3rRunn3r', 'renamed board retains leet letter case');
   assert.equal(profile.recordRun(3, 10).rank, 2, 'score ordering is unchanged');
   console.log('PASS: profile, cookie fallback, local leaderboard, and post-run naming preserve case');
+  const savedHandle = profile.handle;
+  const potential = profile.recordRun(10, 25, true);
+  assert.equal(potential.entry.handle, savedHandle);
+  assert.equal(new PlayerProfile().best.handle, savedHandle, 'board preserves the handle');
+  assert.equal(new PlayerProfile().best.usedCheat, true, 'subtitle flag persists on the board');
+  assert.equal(profile.handle, savedHandle, 'cheat use does not replace the player handle');
+  assert.equal(new PlayerProfile().handle, savedHandle, 'stored handle is unchanged');
+  const ordinary = profile.recordRun(4, 20).entry;
+  assert.equal(ordinary.handle, savedHandle, 'ordinary runs keep their handle');
+  assert.equal(ordinary.usedCheat, false, 'ordinary runs have no subtitle');
+  profile.nameEntry(potential.entry, 'newHandle');
+  assert.equal(new PlayerProfile().best.usedCheat, true, 'renaming preserves the subtitle');
+  stored.set('agent-syndicate:high-scores', JSON.stringify([{ handle: 'POTENTIAL', kills: 3, seconds: 10 }]));
+  assert.equal(new PlayerProfile().best.usedCheat, false, 'legacy rows are not guessed from their name');
+  console.log('PASS: cheat subtitles preserve handles through storage and renaming');
 } finally {
   delete globalThis.localStorage;
   delete globalThis.document;

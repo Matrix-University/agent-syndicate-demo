@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { Enemy } from './Enemy.js';
+import { ENTRY_RAMP } from './World.js';
 
 const SPAWN_RADIUS = 5.5;
 const MAX_ATTACKERS = 2;
 const RESPAWN_DELAY = 3.5;
-const RESPAWN_DISTANCE = 18;
-const RESPAWN_CANDIDATES = 4;
 const MAX_ENEMIES = 7;
 
 export class EnemyManager {
@@ -15,8 +14,6 @@ export class EnemyManager {
     this.defeated = 0;
     this._activeAttackers = 0;
     this._separation = new THREE.Vector3();
-    this._candidate = new THREE.Vector3();
-    this._spawnPoint = new THREE.Vector3();
 
     for (let index = 0; index < count; index += 1) {
       const enemy = new Enemy({ id: index + 1 });
@@ -64,41 +61,24 @@ export class EnemyManager {
     const enemy = new Enemy({ id: this.enemies.length + 1 });
     enemy.orbitDir = this.enemies.length % 2 === 0 ? 1 : -1;
     enemy.manager = this;
-    enemy.orbitAngle = Math.random() * Math.PI * 2;
-    enemy.root.position.set(
-      player.root.position.x + Math.sin(enemy.orbitAngle) * RESPAWN_DISTANCE,
-      0,
-      player.root.position.z + Math.cos(enemy.orbitAngle) * RESPAWN_DISTANCE
-    );
-    world?.collide(enemy.root.position, enemy.collisionRadius);
-    enemy.root.rotation.y = enemy.orbitAngle + Math.PI;
+    this._placeAtEntry(enemy, world);
     this.enemies.push(enemy);
     this._scene.add(enemy.root);
     return enemy;
   }
 
   _respawn(enemy, player, world) {
-    let bestDistanceSq = -1;
-    const spin = Math.random();
-    for (let index = 0; index < RESPAWN_CANDIDATES; index += 1) {
-      const angle = (spin + index / RESPAWN_CANDIDATES) * Math.PI * 2;
-      this._candidate.set(
-        player.root.position.x + Math.sin(angle) * RESPAWN_DISTANCE,
-        0,
-        player.root.position.z + Math.cos(angle) * RESPAWN_DISTANCE
-      );
-      world?.collide(this._candidate, enemy.collisionRadius);
-      const distanceSq = this._candidate.distanceToSquared(player.root.position);
-      if (distanceSq > bestDistanceSq) {
-        bestDistanceSq = distanceSq;
-        enemy.orbitAngle = angle;
-        this._spawnPoint.copy(this._candidate);
-      }
-    }
-
     enemy.reset();
-    enemy.root.position.copy(this._spawnPoint);
-    enemy.root.rotation.y = enemy.orbitAngle + Math.PI;
+    this._placeAtEntry(enemy, world);
+  }
+
+  _placeAtEntry(enemy, world) {
+    const lane = ((enemy.id - 1) % 5 - 2) * 1.8;
+    enemy.root.position.set(lane, 0, ENTRY_RAMP.topZ + 0.8 + (enemy.id % 2) * 1.5);
+    enemy.root.position.y = world?.floorHeight(enemy.root.position) ?? 0;
+    enemy.root.rotation.y = 0;
+    enemy.entryTarget.set(lane, 0, ENTRY_RAMP.bottomZ + 2);
+    enemy.aiState = 'enter';
   }
 
   reset(center) {

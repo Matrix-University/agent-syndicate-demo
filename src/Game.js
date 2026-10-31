@@ -9,7 +9,7 @@ import { CombatSystem } from './CombatSystem.js';
 import { GreenCodeBurst } from './GreenCodeBurst.js';
 import { LiftableCar } from './LiftableCar.js';
 import {
-  PlayerProfile, formatDuration, ordinal, outranks, HIGH_SCORE_SLOTS,
+  PlayerProfile, formatDuration, ordinal, outranks, HIGH_SCORE_SLOTS, CHEAT_SCORE_SUBTITLE,
 } from './PlayerProfile.js';
 import { HandleDialog } from './HandleDialog.js';
 import { RemoteScores } from './RemoteScores.js';
@@ -255,6 +255,7 @@ export class Game {
     const respawned = this.enemyManager.update(dt, this.player, this.world);
 
     if (!this.gameOver) {
+      const previousHealth = this.player.health;
       const preferredEnemy = this._focusEnemy?.alive ? this._focusEnemy : null;
       const result = this.combat.update(
         this.player,
@@ -273,7 +274,6 @@ export class Game {
       if (result.defeatedEnemy) this.greenCodeBurst.play(result.hitEnemy.root.position);
       if (result.playerHit) {
         this.settings.vibrate(60);
-        this._updatePlayerHud();
       }
 
       const flattened = this.combat.resolveThrownProp(
@@ -285,6 +285,9 @@ export class Game {
         this._updateEnemyHud();
       }
 
+      // Resolve damage first: a hit on a healing frame restarts the wait.
+      this.player.regenerateHealth(dt);
+      if (this.player.health !== previousHealth) this._updatePlayerHud();
       if (this.player.health === 0) this._endGame();
       this.world.collide(this.player.root.position, this.player.collisionRadius);
     }
@@ -315,7 +318,7 @@ export class Game {
     const defeated = this.enemyManager.defeated;
     const unlocked = defeated >= CAR_OBJECTIVE_UNLOCK_KILLS;
     this.objectiveText.textContent = unlocked
-      ? 'THROW CAR TO DESTROY AGENTS AND ESCAPE THE GARAGE'
+      ? 'THROW THE CAR. DROP AGENTS. BEAT THE HIGH SCORE.'
       : 'DEFEND YOURSELF';
     this.objectiveProgress.textContent = unlocked ? '' : `${defeated}/${CAR_OBJECTIVE_UNLOCK_KILLS}`;
     // The class arrives once when the goal changes, which plays its one-shot
@@ -325,10 +328,11 @@ export class Game {
 
   _updatePlayerHud() {
     const { health, maxHealth } = this.player;
+    const displayedHealth = Number(health.toFixed(1));
     this.playerHealthFill.style.transform = `scaleX(${health / maxHealth})`;
-    this.playerHealthValue.textContent = `${health} / ${maxHealth}`;
+    this.playerHealthValue.textContent = `${displayedHealth} / ${maxHealth}`;
     this.playerHealthMeter.classList.toggle('low', health <= 3);
-    this.playerHealthMeter.setAttribute('aria-valuenow', String(health));
+    this.playerHealthMeter.setAttribute('aria-valuenow', String(displayedHealth));
     this.playerHealthMeter.setAttribute('aria-valuemax', String(maxHealth));
   }
 
@@ -380,7 +384,9 @@ export class Game {
       rows.push(
         `<li class="${classes.join(' ')}">` +
         `<span class="score-rank">${ordinal(index)}</span>` +
-        `<span class="score-name">${escapeHtml(entry?.handle || (entry ? 'ANON' : '---'))}</span>` +
+        `<span class="score-name">${escapeHtml(entry?.handle || (entry ? 'ANON' : '---'))}` +
+        (entry?.usedCheat === true ? `<span class="score-subtitle">${CHEAT_SCORE_SUBTITLE}</span>` : '') +
+        '</span>' +
         `<span class="score-kills">${entry ? `${entry.kills} ${entry.kills === 1 ? 'AGENT' : 'AGENTS'}` : '--'}</span>` +
         `<span class="score-time">${entry ? formatDuration(entry.seconds) : '--'}</span>` +
         '</li>'
@@ -476,10 +482,13 @@ export class Game {
     this._downTime = 0;
     const count = this.enemyManager.defeated;
     const seconds = this.sessionTime;
-    const { rank, entry } = this.profile.recordRun(count, seconds);
+    const scoreHandle = this.profile.handle;
+    const usedCheat = this.input.shortThrowUsed;
+    const { rank, entry } = this.profile.recordRun(count, seconds, usedCheat);
     this._sessionId += 1;
-    this._sessionRun = count > 0 ? { kills: count, seconds } : null;
+    this._sessionRun = count > 0 ? { kills: count, seconds, handle: scoreHandle || null, usedCheat } : null;
 
+    this.gameOverHandle.textContent = scoreHandle || 'ANON';
     this.gameOverScore.textContent = String(count);
     this.gameOverSession.textContent = formatDuration(this.sessionTime);
     // The local board goes up immediately; the shared one replaces it when the
@@ -518,7 +527,7 @@ export class Game {
     if (!run) return;
 
     const sessionId = this._sessionId;
-    const result = await this.remoteScores.submit({ ...run, handle: this.profile.handle });
+    const result = await this.remoteScores.submit({ ...run, handle: run.handle ?? this.profile.handle });
     if (!result || sessionId !== this._sessionId) return;
 
     this._setBoard('global', result.scores, result.rank - 1, result.rank);
@@ -542,6 +551,7 @@ export class Game {
     this._focusEnemy = null;
     this._updateEnemyHud();
     this._updatePlayerHud();
+    this._updateHandleHud();
     this._updateRunHud();
   }
 

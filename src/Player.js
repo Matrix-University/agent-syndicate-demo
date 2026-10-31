@@ -5,6 +5,9 @@ import { AnimationController, STATE } from './AnimationController.js';
 
 const MOVEMENT_EPSILON = 0.01;
 const INVULNERABLE_DURATION = 0.6;
+const HEALTH_REGEN_DELAY = 180;
+const HEALTH_REGEN_INTERVAL = 30;
+const HEALTH_REGEN_FRACTION = 0.1;
 const ATTACK_PROFILE = {
   fists: {
     duration: 0.42,
@@ -89,6 +92,7 @@ export class Player {
     this.maxHealth = opts.maxHealth ?? 5;
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
+    this._regenTime = 0;
 
     // Scratch vectors reused each frame (avoid per-frame allocation).
     this._forward = new THREE.Vector3();
@@ -280,6 +284,9 @@ export class Player {
       this.velocity.x += (this._targetVel.x - this.velocity.x) * k;
       this.velocity.z += (this._targetVel.z - this.velocity.z) * k;
     }
+    const previousX = this.root.position.x;
+    const previousZ = this.root.position.z;
+    const previousFloorHeight = world?.floorHeight?.(this.root.position) ?? 0;
     this.root.position.x += this.velocity.x * dt;
     this.root.position.z += this.velocity.z * dt;
 
@@ -297,10 +304,14 @@ export class Player {
     const groundHeight = world?.groundHeight(this.root.position) ?? 0;
     const landedOnGround = this.velocityY <= 0 && previousY >= groundHeight &&
       this.root.position.y <= groundHeight;
-    const landedOnFloor = groundHeight === 0 && this.root.position.y <= 0;
+    const floorHeight = world?.floorHeight?.(this.root.position) ?? 0;
+    const landedOnFloor = this.root.position.y <= floorHeight;
+    const followsFloor = this.grounded && !justTookOff &&
+      Math.abs(previousY - previousFloorHeight) < 1e-6 &&
+      world?.canFollowFloor?.(previousX, previousZ, this.root.position);
     let justLanded = false;
-    if (landedOnGround || landedOnFloor) {
-      this.root.position.y = groundHeight;
+    if (followsFloor || landedOnGround || landedOnFloor) {
+      this.root.position.y = !followsFloor && landedOnGround ? groundHeight : floorHeight;
       this.velocityY = 0;
       if (!this.grounded) justLanded = true;
       this.grounded = true;
@@ -425,14 +436,28 @@ export class Player {
     if (acceptsHit) {
       this.health = Math.max(0, this.health - amount);
       this._invulnerableTime = INVULNERABLE_DURATION;
+      this._regenTime = 0;
     }
     return acceptsHit;
+  }
+
+  regenerateHealth(dt) {
+    if (this.health <= 0 || this.health >= this.maxHealth) return;
+    this._regenTime += dt;
+    if (this._regenTime < HEALTH_REGEN_DELAY + HEALTH_REGEN_INTERVAL) return;
+
+    const ticks = Math.floor((this._regenTime - HEALTH_REGEN_DELAY) / HEALTH_REGEN_INTERVAL);
+    const restoredHealth = this.health + ticks * this.maxHealth * HEALTH_REGEN_FRACTION;
+    // Discard floating-point residue so a later lethal hit still reaches zero.
+    this.health = Math.min(this.maxHealth, Number(restoredHealth.toFixed(10)));
+    this._regenTime -= ticks * HEALTH_REGEN_INTERVAL;
   }
 
   reset() {
     this.dropCarry();
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
+    this._regenTime = 0;
     this.velocity.set(0, 0, 0);
     this.velocityY = 0;
     this.grounded = true;

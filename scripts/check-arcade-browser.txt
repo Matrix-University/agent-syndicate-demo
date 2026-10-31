@@ -1,0 +1,22 @@
+# Run with the existing CDP driver's script mode from an isolated scratch CWD.
+# The driver logs ERR without failing its exit code; check the complete output.
+eval window.__game.renderer.setAnimationLoop(null); window.__game.remoteScores.submit = async () => null; 'simulation stopped for deterministic scene checks'
+eval (() => { const g = window.__game; const results = []; for (const e of g.enemyManager.enemies) for (const [x,z] of [[-27.5,51],[-19,-41],[0,15]]) { e.reset(); g.enemyManager._placeAtEntry(e,g.world); g.player.root.position.set(x,0,z); let frames=0; while(frames<7200 && e.aiState!=='orbit') { e.update(1/60,g.player,g.world); frames++; } results.push({id:e.id,target:[x,z],state:e.aiState,position:e.root.position.toArray(),seconds:frames/60,distance:e.root.position.distanceTo(g.player.root.position)}); } if(results.some(r=>r.state!=='orbit')) throw new Error(JSON.stringify(results)); return results; })()
+eval (() => { const g=window.__game; g.player.rig.visible=false; g.enemyManager.enemies.forEach((e,i)=>{e.reset();e.root.position.set((i-2)*2.8,0,-34);e.root.rotation.y=0;e._animate(0);});g.camera.position.set(0,4.5,-20);g.camera.lookAt(0,1.6,-34);g.renderer.render(g.scene,g.camera);return g.enemyManager.enemies.map(e=>e.hairVariant);})()
+shot 05-agent-roster
+eval (() => {const g=window.__game;g.enemyManager.enemies.forEach(e=>e.rig.visible=false);g.liftableCar.reset();g.camera.position.set(-19,5,-30);g.camera.lookAt(-19,1,-41);g.renderer.render(g.scene,g.camera);return g.liftableCar.damageLevel;})()
+shot 06-car-pristine
+eval (() => {const g=window.__game;for(let i=0;i<3;i++)g.liftableCar._land(0);g.liftableCar._updateSettle(.3);g.renderer.render(g.scene,g.camera);if(g.liftableCar.damageLevel!==3)throw new Error('missing damage');return {damage:g.liftableCar.damageLevel,scale:g.liftableCar.model.scale.y};})()
+shot 07-car-damaged
+eval (() => {const g=window.__game;const e=g.enemyManager.enemies[0];e.reset();g.enemyManager._placeAtEntry(e,g.world);g.player.root.position.set(0,0,-39);g.camera.position.set(9,5,-39);g.camera.lookAt(0,1,-48);g.renderer.render(g.scene,g.camera);return {position:e.root.position.toArray(),height:g.world.floorHeight(e.root.position)};})()
+shot 08-ramp-arrival
+eval (() => {const g=window.__game;g._restart();g.player.rig.visible=true;g.player.root.position.set(-21,0,20);g.enemyManager.enemies.forEach(e=>e.root.position.set(20,0,-40));g.camera.position.set(-21,5,30);g.camera.lookAt(-21,1,20);g.start();return 'unobstructed keyboard movement';})()
+wait 1200
+eval window.__startZ=window.__game.player.root.position.z
+hold KeyW 1500
+eval (()=>{const distance=window.__startZ-window.__game.player.root.position.z;if(distance<2)throw new Error('Keyboard movement: '+distance);return {movement:distance};})()
+viewport 390 844 touch
+wait 1000
+shot 09-mobile
+eval window.__game.renderer.setAnimationLoop(null); 'done'
+quit

@@ -62,6 +62,9 @@ export class LiftableCar {
 
     this.impactRadius = IMPACT_RADIUS;
     this.impactDamage = IMPACT_DAMAGE;
+    this.damageLevel = 0;
+    this._landingImpactPending = false;
+    this._modelBaseY = 0;
 
     this.home = new THREE.Vector3(opts.x ?? 0, 0, opts.z ?? 0);
     this.homeYaw = opts.yaw ?? 0;
@@ -140,6 +143,7 @@ export class LiftableCar {
     this._scene.attach(this.root);
     this.state = 'flying';
     this._struck.clear();
+    this._landingImpactPending = false;
     this.previousPosition.copy(this.root.position);
     this.velocity.copy(direction).multiplyScalar(shortThrow ? SHORT_THROW_SPEED : THROW_SPEED);
     this.velocity.y += shortThrow ? SHORT_THROW_LIFT : THROW_LIFT;
@@ -148,6 +152,12 @@ export class LiftableCar {
   // Enemies are hit once per throw; CombatSystem asks before applying damage.
   hasStruck(enemy) { return this._struck.has(enemy); }
   markStruck(enemy) { this._struck.add(enemy); }
+
+  consumeLandingImpact() {
+    const pending = this._landingImpactPending;
+    this._landingImpactPending = false;
+    return pending;
+  }
 
   update(dt, world, player) {
     switch (this.state) {
@@ -163,6 +173,9 @@ export class LiftableCar {
     this.state = 'grounded';
     this.velocity.set(0, 0, 0);
     this._struck.clear();
+    this._landingImpactPending = false;
+    this.damageLevel = 0;
+    this._applyDamage();
     this.root.position.copy(this.home);
     this.root.rotation.set(0, this.homeYaw, 0);
     this.collider.disabled = false;
@@ -210,6 +223,8 @@ export class LiftableCar {
 
     this.root.add(model);
     this.model = model;
+    this._modelBaseY = model.position.y;
+    this._applyDamage();
   }
 
   // Only the fore/aft tilt moves during the heave; the broadside yaw and roll are
@@ -247,21 +262,36 @@ export class LiftableCar {
     }
 
     const groundHeight = world.groundHeight(this.root.position);
-    const landed = this.velocity.y <= 0 && previousY >= groundHeight &&
-      this.root.position.y <= groundHeight;
-    if (landed) this._land(groundHeight);
+    const floorHeight = world.floorHeight?.(this.root.position) ?? 0;
+    const landedOnSurface = previousY >= groundHeight && this.root.position.y <= groundHeight;
+    const landedOnFloor = this.root.position.y <= floorHeight;
+    if (this.velocity.y <= 0 && (landedOnSurface || landedOnFloor)) {
+      this._land(landedOnSurface ? groundHeight : floorHeight);
+    }
   }
 
   _land(groundHeight) {
     this.root.position.y = groundHeight;
     this.velocity.set(0, 0, 0);
     this.state = 'settling';
+    // Combat runs after physics, so retain the final flight sweep across this transition.
+    this._landingImpactPending = true;
+    this.damageLevel = Math.min(3, this.damageLevel + 1);
+    this._applyDamage();
     this._settleTime = 0;
     this._liftFromQuaternion.copy(this.root.quaternion);
     // Keep the yaw it crashed at, drop the tumble.
     this._euler.setFromQuaternion(this.root.quaternion);
     this._euler.set(0, this._euler.y, 0);
     this._settleQuaternion.setFromEuler(this._euler);
+  }
+
+  _applyDamage() {
+    if (!this.model) return;
+    // The crumpled silhouette persists between throws, but never disables pickup.
+    const compression = 1 - this.damageLevel * 0.07;
+    this.model.scale.y = CAR_SCALE * compression;
+    this.model.position.y = this._modelBaseY * compression;
   }
 
   _updateSettle(dt) {
@@ -281,7 +311,7 @@ export class LiftableCar {
   // Pulse the pickup ring only when the player is actually in range, so it reads
   // as a prompt rather than decoration.
   _updateMarker(dt, player) {
-    this._marker.position.set(this.root.position.x, 0.03, this.root.position.z);
+    this._marker.position.set(this.root.position.x, this.root.position.y + 0.03, this.root.position.z);
     const inRange = !!player && this.canLift(player);
     this._markerPulse += dt * (inRange ? 5 : 1.4);
     const base = inRange ? 0.55 : 0.16;
@@ -298,7 +328,7 @@ export class LiftableCar {
     this.collider.z = this.root.position.z;
     this.collider.hx = cos * HALF_WIDTH + sin * HALF_LENGTH;
     this.collider.hz = sin * HALF_WIDTH + cos * HALF_LENGTH;
-    this.collider.height = this.root.position.y + BODY_HEIGHT;
+    this.collider.height = this.root.position.y + BODY_HEIGHT * (1 - this.damageLevel * 0.07);
   }
 }
 

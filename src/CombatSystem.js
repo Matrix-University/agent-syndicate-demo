@@ -21,7 +21,8 @@ export class CombatSystem {
   // Returns the agents this call defeated (a reused array).
   resolveThrownProp(prop, enemies) {
     this._propDefeated.length = 0;
-    if (!prop?.flying || prop.root.position.y > PROP_STRIKE_HEIGHT) {
+    const landing = prop?.consumeLandingImpact();
+    if (!prop?.flying && !landing) {
       return this._propDefeated;
     }
 
@@ -30,7 +31,8 @@ export class CombatSystem {
     const end = prop.root.position;
     for (const enemy of enemies) {
       if (!enemy.alive || prop.hasStruck(enemy)) continue;
-      if (Math.min(start.y, end.y) > PROP_STRIKE_HEIGHT) continue;
+      if (Math.min(start.y, end.y) > enemy.root.position.y + PROP_STRIKE_HEIGHT) continue;
+      if (Math.max(start.y, end.y) < enemy.root.position.y) continue;
       if (distanceToSegmentSqXZ(enemy.root.position, start, end) > radiusSq) continue;
 
       prop.markStruck(enemy);

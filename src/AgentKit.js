@@ -3,9 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 // The System Agents, after docs/image references/AGENT_{BLACK,BROWN,BLONDE}_SHEET:
 // a black two-button suit over a white shirt and slim black tie with a clip,
-// slim rectangular shades, a coiled earpiece in the right ear, and one of three
-// haircuts — slicked back to a widow's peak (black, brown) or a short textured
-// crop (blonde).
+// slim rectangular shades, a coiled earpiece in the right ear, and five hair
+// variants. No slicked-back widow's peak: these are a roster, not Smith copies.
 //
 // Every agent shares one kit of geometry and materials, built on first use and
 // freed when the last agent lets go. The suit is the exception: each agent
@@ -37,9 +36,11 @@ const TORSO_PROFILE = [
 export const AGENT_LEG = { hipY: HIP_Y, thigh: THIGH, shin: SHIN, sole: 0.12, heel: -0.16, toe: 0.3 };
 
 export const HAIR_STYLES = {
-  black: { color: 0x0b0b0d, skin: 0xa86e4a, cut: 'peak' },
-  brown: { color: 0x3b2416, skin: 0xb47a55, cut: 'peak' },
+  black: { color: 0x0b0b0d, skin: 0xa86e4a, cut: 'flat' },
+  brown: { color: 0x3b2416, skin: 0xb47a55, cut: 'part' },
   blonde: { color: 0xc4a468, skin: 0xba8159, cut: 'crop' },
+  red: { color: 0xb44923, skin: 0xd4a281, cut: 'crest' },
+  bald: { color: 0x0b0b0d, skin: 0x9a6344, cut: null },
 };
 
 let shared = null;
@@ -128,7 +129,8 @@ export class AgentKit {
     add(skull, g.head, skin, true);
     add(skull, g.face, skin);
     add(skull, g.mouth, this.tie);
-    add(skull, g.hair[HAIR_STYLES[style].cut], this.hair[style], true);
+    const cut = HAIR_STYLES[style].cut;
+    if (cut) add(skull, g.hair[cut], this.hair[style], true);
     add(skull, g.lenses, this.lens);
     add(skull, g.frames, this.metal);
     add(skull, g.earbud, this.earpiece);
@@ -206,7 +208,10 @@ function buildGeometry() {
     head: new THREE.SphereGeometry(1, 28, 20).scale(HEAD.x, HEAD.y, HEAD.z).translate(0, HEAD_Y, 0),
     face: buildFace(),
     mouth: new THREE.BoxGeometry(0.07, 0.008, 0.01).translate(0, HEAD_Y - 0.13, HEAD.z * 0.9),
-    hair: { peak: buildHair('peak'), crop: buildHair('crop') },
+    hair: {
+      flat: buildHair('flat'), part: buildHair('part'),
+      crop: buildHair('crop'), crest: buildHair('crest'),
+    },
     ...buildShades(),
     ...buildEarpiece(),
     // Each limb is two segments, built from its own joint down. The shoulder cap
@@ -323,20 +328,31 @@ function buildFace() {
   ]);
 }
 
-// A cap over the skull, cut to a hairline. `peak` dips to a widow's peak and
-// lies close; `crop` is a straight, fuller line with more height on top.
+// Shared skull caps with different silhouettes, without changing the skeleton.
 function buildHair(cut) {
-  const lift = cut === 'crop' ? 0.03 : 0.012;
+  const lift = cut === 'flat' ? 0.055 : cut === 'crest' ? 0.07 : 0.03;
   const cap = new THREE.SphereGeometry(1, 40, 28);
   cap.scale(HEAD.x + 0.016, HEAD.y + lift, HEAD.z + 0.016);
   cap.translate(0, HEAD_Y + (cut === 'crop' ? 0.012 : 0), -0.004);
   const pos = cap.attributes.position;
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    if (y <= HEAD_Y + 0.12) continue;
+    if (cut === 'flat') pos.setY(i, Math.min(y + 0.025, HEAD_Y + 0.27));
+    if (cut === 'part') {
+      const part = Math.exp(-(((x - 0.065) / 0.024) ** 2));
+      pos.setY(i, y + (x < 0.04 ? 0.04 : 0) - 0.035 * part);
+    }
+    if (cut === 'crest') {
+      pos.setY(i, y + 0.055 * Math.max(0, 1 - Math.abs(x) / 0.12));
+    }
+  }
   const hairline = (x, z) => {
     if (z > HEAD.z * 0.45) {
-      // Front: the peak's V, or a straight line for the crop.
-      return cut === 'peak' ? HEAD_Y + 0.07 + Math.abs(x) * 0.55 : HEAD_Y + 0.105;
+      return HEAD_Y + 0.105 + (cut === 'part' ? x * 0.2 : 0);
     }
-    if (z > -HEAD.z * 0.2) return HEAD_Y + 0.03; // temples, above the ear
+    if (z > -HEAD.z * 0.2) return HEAD_Y + (cut === 'crest' ? 0.1 : 0.03);
     return HEAD_Y - 0.13; // down to the nape
   };
   const kept = [];
@@ -353,6 +369,7 @@ function buildHair(cut) {
     if (cy > hairline(cx, cz)) kept.push(index[t], index[t + 1], index[t + 2]);
   }
   cap.setIndex(kept);
+  cap.computeVertexNormals();
   return cap;
 }
 

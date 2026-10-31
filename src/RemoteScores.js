@@ -13,6 +13,7 @@ function toEntry(raw) {
     kills: Math.max(0, Math.floor(raw.kills)),
     seconds: Math.max(0, raw.seconds),
     handle: typeof raw.handle === 'string' ? raw.handle : '',
+    usedCheat: raw.usedCheat === true,
   };
 }
 
@@ -38,8 +39,10 @@ export class RemoteScores {
    * answered, or null when it didn't — the caller keeps its local board either
    * way, so this never throws.
    */
-  async submit({ kills, seconds, handle }) {
-    const data = await this._request('POST', { kills, seconds: Math.round(seconds * 10) / 10, handle });
+  async submit({ kills, seconds, handle, usedCheat = false }) {
+    const data = await this._request('POST', {
+      kills, seconds: Math.round(seconds * 10) / 10, handle, usedCheat: usedCheat === true,
+    });
     if (!data) return null;
     return { rank: Number.isFinite(data.rank) ? data.rank : 0, scores: this.scores };
   }

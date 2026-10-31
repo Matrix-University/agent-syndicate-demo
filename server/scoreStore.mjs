@@ -49,7 +49,7 @@ export async function listScores(limit = BOARD_SIZE) {
   if (isDatabaseConfigured()) {
     await ensureSchema();
     const rows = await sql`
-      select handle, kills, seconds, recorded_at from high_scores
+      select handle, kills, seconds, used_cheat, recorded_at from high_scores
       order by kills desc, seconds asc, recorded_at asc
       limit ${limit}
     `;
@@ -57,6 +57,7 @@ export async function listScores(limit = BOARD_SIZE) {
       handle: row.handle,
       kills: row.kills,
       seconds: Number(row.seconds),
+      usedCheat: row.used_cheat === true,
       recordedAt: new Date(row.recorded_at).toISOString(),
     }));
   }
@@ -67,6 +68,7 @@ export async function listScores(limit = BOARD_SIZE) {
       handle: row.handle,
       kills: row.kills,
       seconds: row.seconds,
+      usedCheat: row.usedCheat === true,
       recordedAt: row.recordedAt ?? '',
     }))
     .sort(compareEntries)
@@ -90,8 +92,8 @@ export async function addScore(entry) {
   if (isDatabaseConfigured()) {
     await ensureSchema();
     await sql`
-      insert into high_scores (handle, kills, seconds, email)
-      values (${candidate.handle}, ${candidate.kills}, ${candidate.seconds}, ${candidate.email ?? null})
+      insert into high_scores (handle, kills, seconds, email, used_cheat)
+      values (${candidate.handle}, ${candidate.kills}, ${candidate.seconds}, ${candidate.email ?? null}, ${candidate.usedCheat === true})
     `;
   } else {
     await fs.mkdir(DATA_DIR, { recursive: true });

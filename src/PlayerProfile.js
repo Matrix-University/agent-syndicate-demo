@@ -15,6 +15,7 @@ export const HANDLE_MIN_LENGTH = 2;
 // Nine slots on the board, like the ranked table an arcade cabinet posts on its
 // attract screen. Kept in step with BOARD_SIZE in server/scoreStore.mjs.
 export const HIGH_SCORE_SLOTS = 9;
+export const CHEAT_SCORE_SUBTITLE = 'POTENTIAL';
 
 const ORDINALS = ['1ST', '2ND', '3RD'];
 
@@ -107,6 +108,7 @@ function toEntry(raw) {
     kills: Math.max(0, Math.floor(raw.kills)),
     seconds: Math.max(0, raw.seconds),
     handle: sanitizeHandle(raw.handle),
+    usedCheat: raw.usedCheat === true,
   };
 }
 
@@ -155,10 +157,13 @@ export class PlayerProfile {
    * made the board, or rank 0 when it didn't. A run without a kill never places
    * — otherwise dying instantly would post an unbeatable 0-in-0:00.
    */
-  recordRun(kills, seconds) {
+  recordRun(kills, seconds, usedCheat = false) {
     if (kills < 1) return { rank: 0, entry: null };
 
-    const entry = { kills, seconds: Math.round(seconds * 10) / 10, handle: this.handle };
+    const entry = {
+      kills, seconds: Math.round(seconds * 10) / 10,
+      handle: this.handle, usedCheat: usedCheat === true,
+    };
     // A tie keeps the incumbent: on a real cabinet you have to beat the row, not match it.
     const above = this.scores.findIndex((row) => compareRuns(entry, row) < 0);
     const position = above === -1 ? this.scores.length : above;

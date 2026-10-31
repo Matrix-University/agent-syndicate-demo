@@ -14,6 +14,7 @@ export class Input {
     this._mobileLiftPressed = false;
     this._shortThrowAllowed = false;
     this._shortThrowEnabled = false;
+    this.shortThrowUsed = false;
     this._shortThrowSequence = 0;
     this._desktopPointer = window.matchMedia('(hover: hover) and (pointer: fine)');
     this._onDesktopPointerChange = () => {
@@ -88,6 +89,7 @@ export class Input {
     this._shortThrowAllowed = allowed;
     this._shortThrowEnabled = false;
     this._shortThrowSequence = 0;
+    if (allowed) this.shortThrowUsed = false;
   }
 
   _trackShortThrowCode(event) {
@@ -107,6 +109,7 @@ export class Input {
       : event.key === '1' ? 1 : 0;
     if (this._shortThrowSequence === 3) {
       this._shortThrowEnabled = !this._shortThrowEnabled;
+      if (this._shortThrowEnabled) this.shortThrowUsed = true;
       this._shortThrowSequence = 0;
     }
   }

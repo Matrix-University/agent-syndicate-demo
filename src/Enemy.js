@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AgentKit, AGENT_LEG } from './AgentKit.js';
+import { AgentKit, AGENT_LEG, HAIR_STYLES } from './AgentKit.js';
 
 const HIT_REACTION_DURATION = 0.24;
 const DEATH_DURATION = 0.7;
@@ -8,7 +8,7 @@ const WINDUP_DURATION = 0.4;
 const STRIKE_DURATION = 0.16;
 const RECOVER_DURATION = 0.9;
 const APPROACH_TIMEOUT = 4;
-const HAIR_VARIANTS = ['black', 'brown', 'blonde'];
+const HAIR_VARIANTS = Object.keys(HAIR_STYLES);
 
 // Momentum, as the player has it: velocity eases toward the wanted one so starts
 // and turns carry weight, and braking is quicker than getting going.
@@ -21,6 +21,7 @@ const BACK_DOT = -0.35;
 // The approach stops this far inside attackRange, so arriving always crosses
 // the windup's `distance <= attackRange` test instead of parking a hair outside.
 const ARRIVE_MARGIN = 0.02;
+const ENTRY_CLEARANCE = 0.3;
 
 // The gait, after the player's baked Walk and Run (scripts/lib/locomotion.mjs):
 // each arm swings against its own side's leg with the elbow closing on the
@@ -105,7 +106,7 @@ export class Enemy {
     this.root.add(this.rig);
 
     this.id = opts.id ?? 0;
-    this.hairVariant = opts.hairVariant ?? HAIR_VARIANTS[(this.id - 1) % HAIR_VARIANTS.length];
+    this.hairVariant = opts.hairVariant ?? HAIR_VARIANTS[Math.max(0, this.id - 1) % HAIR_VARIANTS.length];
     this.maxHealth = 3;
     this.health = this.maxHealth;
     this.collisionRadius = 0.7;
@@ -132,6 +133,7 @@ export class Enemy {
 
     this._toTarget = new THREE.Vector3();
     this._orbitPoint = new THREE.Vector3();
+    this.entryTarget = new THREE.Vector3();
     this._targetVel = new THREE.Vector3();
     this._facing = new THREE.Vector3();
     this._maxStep = 0;
@@ -414,6 +416,17 @@ export class Enemy {
     this._targetVel.set(0, 0, 0);
     this._maxStep = 0;
     switch (this.aiState) {
+      case 'enter':
+        this._routeEntry(world);
+        // A crowd can cross an exit line without all occupying the same point.
+        if (this.root.position.z >= this.entryTarget.z - 0.2) this.aiState = 'arrive';
+        else this._moveToward(this.entryTarget, dt);
+        break;
+      case 'arrive':
+        if (this._moveToward(player.root.position, dt, this.orbitRadius) <= this.orbitRadius + 0.1) {
+          this.aiState = 'orbit';
+        }
+        break;
       case 'orbit':
         this._moveToward(this._orbitTarget(player, dt), dt);
         if (this.manager?.requestAttackSlot()) {
@@ -464,14 +477,37 @@ export class Enemy {
     }
 
     this._integrate(dt);
-    this._faceTarget(player.root.position, dt);
+    this._faceTarget(this.aiState === 'enter' ? this.entryTarget : player.root.position, dt);
     world?.collide(this.root.position, this.collisionRadius);
+    this.root.position.y = world?.floorHeight?.(this.root.position) ?? 0;
   }
 
   _releaseSlot() {
     if (!this._hasSlot) return;
     this._hasSlot = false;
     this.manager?.releaseAttackSlot();
+  }
+
+  _routeEntry(world) {
+    if (!world) return;
+    const position = this.root.position;
+    const target = this.entryTarget;
+    const clearance = this.collisionRadius + ENTRY_CLEARANCE;
+    for (const collider of world.colliders) {
+      if (collider.disabled) continue;
+      const left = collider.x - collider.hx - clearance;
+      const right = collider.x + collider.hx + clearance;
+      const near = collider.z - collider.hz - clearance;
+      const far = collider.z + collider.hz + clearance;
+      if (Math.max(position.z, target.z) < near || Math.min(position.z, target.z) > far ||
+        Math.max(position.x, target.x) <= left || Math.min(position.x, target.x) >= right) continue;
+
+      // A car can cover the waypoint or the route to it. Pass its side and far
+      // edge before chasing the player, rather than waiting at an occupied point.
+      const passLeft = position.x < collider.x || (position.x === collider.x && this.orbitDir < 0);
+      target.x = passLeft ? left : right;
+      target.z = Math.max(target.z, far);
+    }
   }
 
   _orbitTarget(player, dt) {

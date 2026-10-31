@@ -6,11 +6,35 @@ All notable changes to this project are documented in this file, which follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-31
+
+### Added
+
+- Five same-size agent looks: black flat-top, brown side-part, blonde crop, red
+  crest, and bald. Reinforcements and respawns arrive down a physical entry ramp.
+- Car landings hit nearby agents and progressively compress the car's silhouette.
+  A throw never damages the same agent twice; retry restores the car.
+- Runs that activate desktop `101` keep their handle on local and shared
+  scoreboards, with POTENTIAL as a subtitle. The per-run cheat flag is persisted
+  in localStorage, file storage, and Postgres.
+- Hidden health regeneration: after three damage-free minutes, recover 10% of
+  maximum health every 30 seconds (first tick at 3:30), including while running.
+  Taking damage resets the wait; menus freeze it, and health never exceeds full.
+
 ### Changed
 
+- The unlocked car objective now encourages high scores rather than promising
+  an escape ending. Endless spawning remains unchanged.
 - The project is now browser-first: full Decentraland compatibility is no longer
   required. Documentation and AI guidance retain compatibility as a best-effort
   goal, without requiring code rewrites or asset rebakes solely to restore it.
+
+### Fixed
+
+- Returning agents route around cars blocking the ramp or its exit. An exit
+  line prevents multiple agents from getting stuck at the same waypoint.
+- Walking or sprinting downhill stays grounded, so jump, punch, and pickup
+  inputs work on the ramp. Intentional jumps and falls from ledges still work.
 
 ### Removed
 
