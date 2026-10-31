@@ -71,13 +71,16 @@ one of the agents"_. It is a stale asset, not a changed model. **Ctrl+Shift+R.**
 
 Edit the `KEEP` set at the top of [`scripts/bake-animations.mjs`](../scripts/bake-animations.mjs)
 (the script also supports `--all`, but expanding the shipped set requires approval).
-The current set contains nine library clips plus five authored clips:
+The current set contains nine library clips plus six authored clips:
 `Idle_No_Loop`, `Walk_Carry_Loop`, `Melee_Hook`, `Melee_Hook_Rec`, `Hit_Knockback`,
 `OverhandThrow`, plus the three `NinjaJump_*` phases.
 `Walk_Carry_Loop` does double duty — it is the source the authored clips are built
 from _and_ a shipped clip, renamed `Carry_Loop` via `RENAME`, as `OverhandThrow` is
 renamed `Throw`. Synthesis is **additive**: a recipe writes new names, it never
 replaces the clip its source ships as.
+`Combat_Idle` is authored by `scripts/lib/combat.mjs`: it keeps neutral idle's
+legs and breathing and raises both hands into an unarmed guard. The library's
+shield idle was inspected but only raises one hand.
 The full shipped set, and what each clip is bound to, is catalogued in
 [animation-catalog.md](./animation-catalog.md).
 Keeping fewer clips = smaller file (animation keyframes, not geometry, dominate the
@@ -258,7 +261,7 @@ feels too high or floaty.
 9. `resample()` (lossless keyframe reduction) + `prune()` + `dedup()`, collapse to
    one buffer, write the GLB.
 
-No Blender required. Validated on the current assets: 14 clips, 65 animated bones,
+No Blender required. The current assets contain 15 clips and 65 animated bones,
 all channel targets resolve, single skin/skeleton.
 
 ## The single shipped asset

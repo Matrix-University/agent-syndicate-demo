@@ -6,6 +6,31 @@ All notable changes to this project are documented in this file, which follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-31
+
+### Added
+
+- A two-handed combat stance, cancelable punch recovery, buffered follow-up
+  punches, and grounded hit reactions for the player.
+- Destroyed cars leave scorched wrecks with a brief smoke burst. After the third
+  landing, the nearest unused parked car becomes the only throwable car. Retry
+  restores the fleet.
+
+### Changed
+
+- Agents raise their guard and alternate left/right swipes. Player walk/run
+  transitions preserve stride phase and slow down more naturally when stopping.
+
+### Fixed
+
+- Hits cancel a punch's remaining damage window without interrupting car
+  animations or throw release timing. Retry clears active animation states.
+
+### Security
+
+- Static-file requests are checked against the build directory boundary to
+  prevent access to paths outside it.
+
 ## [0.8.0] - 2026-10-31
 
 ### Added

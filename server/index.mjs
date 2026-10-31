@@ -44,10 +44,11 @@ const MIME_TYPES = {
 
 async function serveStatic(req, res) {
   const requestedPath = decodeURIComponent(req.url.split('?')[0]);
-  const candidate = path.normalize(path.join(DIST_DIR, requestedPath));
+  const candidate = path.resolve(DIST_DIR, `.${requestedPath}`);
+  const relativePath = path.relative(DIST_DIR, candidate);
 
   // Guard against path traversal escaping dist/.
-  if (!candidate.startsWith(DIST_DIR)) {
+  if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
     res.statusCode = 403;
     res.end('Forbidden');
     return;

@@ -18,6 +18,11 @@ ideas later in this document are not part of this list.
   fallback keeps the game playable if the character model fails to load.
 - **Melee combat:** punches, enemy strikes, health, brief protection after a hit,
   and green-code bursts when agents are defeated.
+- **Animation polish:** two-handed combat idle near agents, cancelable punch
+  recovery, a short follow-up input buffer, alternating agent swipes, and
+  phase-matched walk/run transitions. Hits interrupt empty-handed punches, but
+  do not interrupt a carried car's throw. Retry clears animation state.
+  Check with `node scripts/check-animation-transitions.mjs`.
 - **Crowd combat:** five starting agents, up to two attacking at once,
   reinforcements up to seven, and returning enemies after defeat. Reinforcements
   and respawns run down the entry ramp, routing around landed cars that block
@@ -27,7 +32,12 @@ ideas later in this document are not part of this list.
 - **Car lifting and throwing:** pick up the car by the entry ramp, carry it
   overhead, and throw it into agents. The landing also hits nearby agents, once
   per agent per throw. Each landing compresses the car's silhouette (up to three
-  damage levels); it stays usable, and retry restores it.
+  damage levels). The third landing destroys it and leaves a non-liftable wreck.
+  Wrecks have a scorched finish and a brief smoke burst at the destruction impact.
+  Only then does the nearest unused, undamaged parked car become throwable.
+  Only one car is throwable at a time; the same car stays active between throws.
+  When the fleet is exhausted, no car can be lifted. Retry restores the fleet.
+  Regression check: `node scripts/check-car-replacement.mjs`.
 - **Desktop short-throw easter egg:** an optional shorter car throw, with normal
   throwing preserved on touch devices.
 - **Health regeneration:** a hidden three-minute damage-free delay, followed by
@@ -488,9 +498,10 @@ page, license, and any required attribution.
    into green code (a particle burst on death).
 4. ✅ A crowd encircles the player, limited to two active attackers, with
    last-hit reinforcements, respawns, player health, and retry.
-5. ✅ Pick up a car and throw it. One car is liftable — the one parked by the
-   entry ramp. **E** grabs it, **J** heaves it; anything it ploughs through goes
-   down. It re-settles wherever it lands and can be picked up again.
+5. ✅ Pick up a car and throw it. One car is liftable at a time — initially the
+   one parked by the entry ramp. **E** grabs it, **J** heaves it; anything it
+   ploughs through goes down. It can be picked up again until the third landing
+   destroys it; then the nearest unused parked car takes over.
 
 ## Game Scenes
 

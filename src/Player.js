@@ -5,6 +5,8 @@ import { AnimationController, STATE } from './AnimationController.js';
 
 const MOVEMENT_EPSILON = 0.01;
 const INVULNERABLE_DURATION = 0.6;
+const HIT_REACTION_DURATION = 0.24;
+const PUNCH_BUFFER_DURATION = 0.15;
 const HEALTH_REGEN_DELAY = 180;
 const HEALTH_REGEN_INTERVAL = 30;
 const HEALTH_REGEN_FRACTION = 0.1;
@@ -77,9 +79,11 @@ export class Player {
     this.velocityY = 0;
     this.grounded = true;
     this.state = STATE.IDLE;
+    this.combatNearby = false;
     this._t = 0; // animation clock (placeholder only)
     this._punchTime = ATTACK_PROFILE.fists.duration;
     this._punchHitConsumed = true;
+    this._punchBufferTime = 0;
 
     // Carried prop (a LiftableCar). Player only needs lift(player)/launch(dir, shortThrow)
     // from it — it owns its own visuals, physics and collider.
@@ -92,6 +96,7 @@ export class Player {
     this.maxHealth = opts.maxHealth ?? 5;
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
+    this._hitTime = 0;
     this._regenTime = 0;
 
     // Scratch vectors reused each frame (avoid per-frame allocation).
@@ -255,19 +260,25 @@ export class Player {
     // Give jump priority when both one-shot inputs arrive on the same frame.
     const wantsJump = input.jumpPressed && this.grounded && !handsFull;
     const profile = this._attackProfile;
+    this._punchBufferTime = Math.max(0, this._punchBufferTime - dt);
+    if (wantsJump || handsFull || !this.grounded || this._hitTime > 0) this._punchBufferTime = 0;
+    else if (input.punchPressed && this._punchTime >= profile.duration - PUNCH_BUFFER_DURATION) {
+      this._punchBufferTime = PUNCH_BUFFER_DURATION;
+    }
     const punchReady = this._punchTime >= profile.duration && !this.anim?.acting;
-    const startsPunch = punchReady && input.punchPressed && !wantsJump &&
-      this.grounded && !handsFull;
+    const startsPunch = punchReady && (input.punchPressed || this._punchBufferTime > 0) && !wantsJump &&
+      this.grounded && !handsFull && this._hitTime <= 0;
     if (startsPunch) {
       this._punchTime = 0;
       this._punchHitConsumed = false;
-      this.anim?.playAction('punch');
+      this._punchBufferTime = 0;
+      this.anim?.playAction('punch', profile.duration);
     }
 
     // Horizontal movement — rooted while a blocking action (punch, pickup, throw)
     // plays. Carrying doesn't root, it just slows you down.
     const punching = this._punchTime < profile.duration;
-    const rooted = punching || lifting || throwing || !!this.anim?.acting;
+    const rooted = punching || lifting || throwing || this._hitTime > 0 || !!this.anim?.acting;
     const sprintingForward = input.sprint && input.moveZ > 0;
     const baseSpeed = carrying
       ? (sprintingForward ? CARRY_SPEED_SPRINT : CARRY_SPEED_WALK)
@@ -346,7 +357,7 @@ export class Player {
       ? (locomoting ? STATE.CARRY_OVERHEAD : STATE.CARRY_OVERHEAD_IDLE)
       : locomoting
         ? (backing ? STATE.WALK_BACK : running ? STATE.RUN : STATE.WALK)
-        : STATE.IDLE;
+        : this.combatNearby && this.grounded ? STATE.COMBAT_IDLE : STATE.IDLE;
 
     if (this.anim) {
       if (justTookOff) this.anim.jumpTakeoff();
@@ -378,6 +389,7 @@ export class Player {
     }
     this._releaseCarry(); // after the timer advance, so the release lands on cue
     this._invulnerableTime = Math.max(0, this._invulnerableTime - dt);
+    this._hitTime = Math.max(0, this._hitTime - dt);
   }
 
   get carrying() {
@@ -392,8 +404,9 @@ export class Player {
   // Take hold of a liftable prop. It offers lift(player)/launch(dir, shortThrow).
   startLift(prop) {
     const canLift = !this.carry && this.grounded && !this.busyWithProp &&
-      this._punchTime >= this._attackProfile.duration && !this.anim?.acting;
+      this._punchTime >= this._attackProfile.duration && !this.anim?.acting && this._hitTime <= 0;
     if (!canLift) return false;
+    this._punchBufferTime = 0;
     this.carry = prop;
     this._liftTime = 0;
     prop.lift(this);
@@ -402,13 +415,13 @@ export class Player {
 
   // Heave it: the prop leaves the hands partway through the clip (_releaseCarry).
   startThrow(shortThrow = false) {
-    const canThrow = !!this.carry && !this.busyWithProp;
+    const canThrow = !!this.carry && !this.busyWithProp && !this.anim?.acting && this._hitTime <= 0;
     if (!canThrow) return false;
     this._throwTime = 0;
     this._throwReleased = false;
     // Latch at wind-up so toggling the cheat cannot change a throw mid-animation.
     this._shortThrow = shortThrow;
-    this.anim?.playAction('throw', THROW_PROFILE.clipRate);
+    this.anim?.playAction('throw', THROW_PROFILE.duration / THROW_PROFILE.clipRate);
     return true;
   }
 
@@ -437,6 +450,15 @@ export class Player {
       this.health = Math.max(0, this.health - amount);
       this._invulnerableTime = INVULNERABLE_DURATION;
       this._regenTime = 0;
+      if (!this.carrying && !this.busyWithProp) {
+        this._punchTime = this._attackProfile.duration;
+        this._punchHitConsumed = true;
+        this._punchBufferTime = 0;
+        if (this.grounded) {
+          this._hitTime = HIT_REACTION_DURATION;
+          this.anim?.playReaction('hit', HIT_REACTION_DURATION);
+        }
+      }
     }
     return acceptsHit;
   }
@@ -457,13 +479,19 @@ export class Player {
     this.dropCarry();
     this.health = this.maxHealth;
     this._invulnerableTime = 0;
+    this._hitTime = 0;
     this._regenTime = 0;
     this.velocity.set(0, 0, 0);
     this.velocityY = 0;
     this.grounded = true;
     this.state = STATE.IDLE;
+    this.combatNearby = false;
     this._punchTime = this._attackProfile.duration;
     this._punchHitConsumed = true;
+    this._punchBufferTime = 0;
+    this.anim?.reset();
+    this.rig.rotation.x = 0;
+    this.rig.rotation.z = 0;
   }
 
   get punchActive() {
@@ -501,6 +529,7 @@ export class Player {
   // Procedural stand-in used only while the placeholder rig is showing (no GLB,
   // or it failed to load). Real clips are driven by the AnimationController above.
   _animate(dt, intensity) {
+    this.rig.rotation.x = -0.25 * Math.sin(Math.PI * this._hitTime / HIT_REACTION_DURATION);
     const punching = this._punchTime < this._attackProfile.duration;
     if (this.carrying || !this._throwReleased) {
       // Zero-asset fallback: no carry clip to play, so just hold the arms up.
@@ -540,8 +569,9 @@ export class Player {
       const k = 1 - Math.pow(0.0001, dt); // ease limbs back to rest
       this.legL.rotation.x *= 1 - k;
       this.legR.rotation.x *= 1 - k;
-      this.armL.rotation.x *= 1 - k;
-      this.armR.rotation.x *= 1 - k;
+      const armRest = this.state === STATE.COMBAT_IDLE ? -0.7 : 0;
+      this.armL.rotation.x += (armRest - this.armL.rotation.x) * k;
+      this.armR.rotation.x += (armRest - this.armR.rotation.x) * k;
       this.armR.rotation.z *= 1 - k;
       this.torso.rotation.y *= 1 - k;
       this.torso.position.y = 2.0 + Math.sin(this._t * 1.5) * 0.03; // breathing

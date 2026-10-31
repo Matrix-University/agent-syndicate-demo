@@ -58,7 +58,7 @@ export class Game {
     this.player.root.rotation.y = PLAYER_SPAWN_YAW;
     this.scene.add(this.player.root);
 
-    // One liftable car, parked in the bay World leaves empty by the entry ramp.
+    // One active car; after destruction it takes over an unused parked car.
     this.liftableCar = new LiftableCar(this.scene, this.world, LIFTABLE_CAR_SLOT);
 
     this.combat = new CombatSystem();
@@ -245,6 +245,17 @@ export class Game {
       this.player.startLift(this.liftableCar);
     }
 
+    const combatRangeSq = this.player.combatNearby ? 100 : 64;
+    let combatNearby = false;
+    if (!this.gameOver) {
+      for (const enemy of this.enemyManager.enemies) {
+        if (enemy.alive && enemy.root.position.distanceToSquared(this.player.root.position) <= combatRangeSq) {
+          combatNearby = true;
+          break;
+        }
+      }
+    }
+    this.player.combatNearby = combatNearby;
     this.player.update(
       dt,
       this.gameOver ? this._idleInput : this.input,

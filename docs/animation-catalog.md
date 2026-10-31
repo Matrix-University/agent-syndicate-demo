@@ -40,7 +40,7 @@ neither; the `Carry_Overhead_*` pair is A because nothing in it holds a load
 _overhead_; `Throw_Overhead` is A because the library's only throw is one-armed;
 `Melee_Hook` is P because a hook punch is a hook punch.
 
-## Shipped — `public/models/agent-dcl.glb` (14 clips)
+## Shipped — `public/models/agent-dcl.glb` (15 clips)
 
 The browser's current baked asset. DCL compatibility is best effort, not a
 requirement; do not rewrite code or rebake assets solely to restore it today.
@@ -58,16 +58,49 @@ in `src/AnimationController.js`; intent lives in `src/Player.js`.
 | `Melee_Hook`          | 0.47s | P     | `ACTIONS.punch`                       | UAL2                                   | Fired by `Input.punchPressed` (**J** / mobile button), only when the hands are empty. Blocking one-shot.                                                                                                                                                                                                                                                       |
 | `Throw_Overhead`      | 0.95s | **A** | `ACTIONS.throw`                       | authored over `Idle_No_Loop`'s stance  | The car heave: two-handed, hold → wind-up → release → follow-through → neutral. Authored **to** `Player`'s `THROW_PROFILE`, so it plays at rate 1 and its forward extension lands on `release` (0.42s), the frame the prop leaves the hands. Bound by fragment `throw_overhead` **ahead of** `throw`, or the one-armed `Throw` below wins the substring match. |
 | `Throw`               | 1.33s | P     | _unbound_                             | UAL2 `OverhandThrow`, renamed          | One-armed grenade toss. **Was** the car heave and read as a punch — the off hand stays at the hip while a chassis floats overhead (1.19m of hand-to-hand fore/aft asymmetry, against 0.08m for `Throw_Overhead`). Parked for a future one-handed throw; don't re-point `ACTIONS.throw` at it.                                                                  |
-| `Melee_Hook_Rec`      | 0.60s | P     | _unbound_                             | UAL2                                   | Recovery half of the hook — for a combo window or whiff recovery.                                                                                                                                                                                                                                                                                              |
-| `Hit_Knockback`       | 0.83s | P     | _unbound_                             | UAL2                                   | Damage reaction; waiting on a hit/health system.                                                                                                                                                                                                                                                                                                               |
+| `Melee_Hook_Rec`      | 0.60s | P     | `ACTIONS.punchRecovery`                | UAL2                                   | Automatic return after the hook; movement, jump, damage or a new attack cancels it without adding a movement lock. |
+| `Hit_Knockback`       | 0.83s | P     | `REACTIONS.hit`                        | UAL2                                   | Retimed to a 0.24s grounded reaction. Cancels punch damage; car actions still take damage but keep their animation and release timing. |
 | `NinjaJump_Start`     | 0.97s | P     | `JUMP_CLIPS.start`                    | UAL2                                   | Takeoff. The sequence layers over `Player`'s vertical physics (clips are in-place).                                                                                                                                                                                                                                                                            |
 | `NinjaJump_Idle_Loop` | 2.00s | P     | `JUMP_CLIPS.air`                      | UAL2                                   | Airborne loop.                                                                                                                                                                                                                                                                                                                                                 |
 | `NinjaJump_Land`      | 1.27s | P     | `JUMP_CLIPS.land`                     | UAL2                                   | Landing flourish — **cancelable**: movement input or a new action ends it early.                                                                                                                                                                                                                                                                               |
+| `Combat_Idle`         | 2.50s | **A** | `STATE.COMBAT_IDLE`                    | authored over `Idle_No_Loop`           | Both hands guarded with closed fists. The library shield idle only raises one hand, so it is not used. |
 
-Four of the fourteen (`Carry_Loop`, `Throw`, `Melee_Hook_Rec`, `Hit_Knockback`)
-ship but bind to nothing yet. Keyframes — not geometry — dominate this file's size, and
+Two of the fifteen (`Carry_Loop`, `Throw`) ship but are not selected by gameplay.
+Keyframes — not geometry — dominate this file's size, and
 Draco does not compress them, so drop anything from `KEEP` that isn't going to be
 wired up soon.
+
+**Car lifecycle:** the overhead carry/throw pair always serves one active car.
+The same car remains liftable through its first two damaging landings. The third
+landing destroys it, leaves a non-liftable wreck, and selects the nearest unused,
+undamaged parked car as the sole replacement. An exhausted fleet has no liftable
+car until retry restores all cars. No new animation clip or input is needed.
+Destroyed cars keep their compressed silhouette and get a dark, matte scorched
+finish. A 1.1-second expanding smoke burst plays once at the third landing, at the
+wreck's location even after a replacement is selected. Retry clears the smoke
+and restores the original materials; parked/replacement materials stay unchanged.
+Smoke uses camera-facing sprites with a shared soft-edged texture and material.
+
+### Current animation behavior
+
+- The player enters combat idle while standing within 8m of a live agent, and
+  leaves it beyond 10m to avoid flickering at the boundary. Carry and jump retain
+  their own poses. Agents blend into guard after their entry approach.
+- The hook is retimed to its 0.42s gameplay duration. A press in the final 0.15s
+  can buffer the next punch; it is cleared on damage, jump, pickup or retry.
+- Agents alternate mirrored left/right swipes; damage, range and attack-slot
+  timing are unchanged. Only the visible rig turns with the strike.
+- Walk/run changes preserve normalized stride phase. Playback can slow below
+  the old 0.6x minimum as the player comes to rest.
+- Empty-handed grounded hits cancel the punch and lock movement for 0.24s,
+  with the same lock and a procedural flinch when the player model is absent.
+  Airborne poses and car actions retain priority. Retry clears all mixer states.
+
+Regression checks: `node scripts/check-animation-transitions.mjs` and
+`node scripts/check-car-replacement.mjs`.
+Still pending: player jab/cross clips and combo design, directional hit reactions,
+landing/contact polish, and ramp foot IK. These need a separate authoring and
+visual play-test pass; the current changes do not implement them.
 
 **`STATE.WALK_BACK` has no clip of its own.** Backpedalling (`Player` holds the
 facing when the move points >110 degrees behind the camera) falls back to `Walk`
@@ -184,12 +217,16 @@ be authored (tier A) or imported from another same-rig pack.
 
 | Clip                       | Dur          | Use for                                                       |
 | -------------------------- | ------------ | ------------------------------------------------------------- |
-| `Idle_Shield_Loop`         | 2.50s        | **Combat idle** (roadmap MVP) — hands already up and guarded. |
+| `Idle_Shield_Loop`         | 2.50s        | One-handed shield stance; inspected and rejected for the two-handed unarmed guard. |
 | `Idle_FoldArms_Loop`       | 2.50s        | Waiting NPC.                                                  |
 | `Idle_Rail_Loop` / `_Call` | 2.50 / 2.50s | Leaning NPC, plus a beckon.                                   |
 | `Idle_TalkingPhone_Loop`   | 2.93s        | Phone idle — on-theme for the setting.                        |
 | `Zombie_Idle_Loop`         | 1.33s        | Enemy idle.                                                   |
 | `A_TPose`                  | 2.50s        | Reference pose, not an animation. Never bake it.              |
+
+`Enemy` uses the zombie idle, shamble, and scratch beats as procedural poses on
+its shared `AgentKit` rig. These library clips remain unbound: their channels
+target the separate UAL2 skeleton and are not played on the procedural agents.
 
 ### Interaction & props
 

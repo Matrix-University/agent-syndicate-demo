@@ -18,6 +18,7 @@ import { buildSkeleton } from './lib/skeleton.mjs';
 import { synthesizeLocomotion } from './lib/locomotion.mjs';
 import { synthesizeCarry } from './lib/carry.mjs';
 import { synthesizeThrow } from './lib/throw.mjs';
+import { synthesizeCombatIdle } from './lib/combat.mjs';
 import { dressOutfit } from './lib/outfit.mjs';
 import { bulkUp } from './lib/physique.mjs';
 
@@ -35,6 +36,7 @@ const LOCOMOTION_SOURCE = 'Walk_Carry_Loop';
 const POSTURE_SOURCE = 'Idle_No_Loop';
 const SYNTHESIZED = [
   'Walk', 'Run', 'Carry_Overhead_Loop', 'Carry_Overhead_Idle', 'Throw_Overhead',
+  'Combat_Idle',
 ];
 
 // Clips to embed (by exact name). Curated for the brawler: idle, locomotion, an
@@ -131,6 +133,7 @@ for (const node of charRoot.listNodes()) {
 // pinned in a carry pose. Author real Walk/Run clips from its (correct) lower
 // body, then keep the original as Carry_Loop for the future carry-object state.
 const skeleton = buildSkeleton(charRoot);
+synthesizeCombatIdle(charDoc, skeleton);
 const stats = synthesizeLocomotion(charDoc, skeleton, LOCOMOTION_SOURCE);
 console.log(
   `Synthesized Walk + Run from ${LOCOMOTION_SOURCE} ` +

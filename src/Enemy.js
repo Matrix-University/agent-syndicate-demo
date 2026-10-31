@@ -80,14 +80,11 @@ const BREATH_RATE = (Math.PI * 2) / 3.8;
 const SHIFT_RATE = (Math.PI * 2) / 7.5;
 const IDLE_SHIFT = 0.018;
 
-// The strike: the right fist chambers at the chest, then drives straight out as
-// the shoulders turn into it, the left hand up by the chin. Keyed to the windup
-// and strike timings above, which are what the hit test runs on. `shoulder` is
-// the arm's pitch (negative forward), `elbow` its fold, `roll` its swing away
-// from the body, `twist` and `lean` the trunk's.
+// The scratch winds across the body and slashes out, mirrored on alternate attacks.
+// Its phases use the same windup/strike timings as the hit test.
 const REST_POSE = { shoulder: 0, elbow: REST_ELBOW, roll: 0, twist: 0, lean: 0 };
-const CHAMBER = { shoulder: 0.6, elbow: 2.2, roll: 0.15, twist: -0.28, lean: -0.04 };
-const EXTEND = { shoulder: -1.5, elbow: 0.08, roll: -0.2, twist: 0.3, lean: 0.12 };
+const SCRATCH_CHAMBER = { shoulder: 0.35, elbow: 2.1, roll: 0.62, twist: -0.5, lean: -0.04 };
+const SCRATCH_EXTEND = { shoulder: -1.05, elbow: 0.42, roll: 0.5, twist: 0.58, lean: 0.12 };
 const GUARD = { shoulder: -0.7, elbow: 1.9, roll: -0.15 };
 const POSE_KEYS = Object.keys(REST_POSE);
 const FIGHT_IN = 14;
@@ -130,6 +127,8 @@ export class Enemy {
     this._aiTimer = 0;
     this._hasSlot = false;
     this._strikeHitConsumed = true;
+    this._strikeSide = this.id % 2 ? -1 : 1;
+    this._nextStrikeSide = this._strikeSide;
 
     this._toTarget = new THREE.Vector3();
     this._orbitPoint = new THREE.Vector3();
@@ -148,6 +147,7 @@ export class Enemy {
     this._phase = 0; // gait cycle; the left foot is furthest ahead at π/2
     this._stalk = 0;
     this._fight = 0; // weight of the strike pose over the gait
+    this._guard = 0;
     this._recoil = 0;
     this._fall = 0;
     this._idle = this.id * 1.37; // so the crowd doesn't breathe in unison
@@ -272,6 +272,8 @@ export class Enemy {
     const standing = 1 - reach;
 
     const fighting = alive && (this.aiState === 'windup' || this.aiState === 'strike');
+    const guarding = alive && this.aiState !== 'enter' && this.aiState !== 'arrive';
+    this._guard += ((guarding ? 1 : 0) - this._guard) * (1 - Math.exp(-6 * dt));
     const fightRate = fighting ? FIGHT_IN : FIGHT_OUT;
     this._fight += ((fighting ? 1 : 0) - this._fight) * (1 - Math.exp(-fightRate * dt));
     const fight = this._fight;
@@ -292,7 +294,7 @@ export class Enemy {
     // A flinch or a fall squares the body back up to the player, so it goes
     // over away from the hit rather than off to the side it was circling.
     const squared = 1 - Math.max(recoil, fall);
-    const yaw = this._stalk * squared + gaitTwist + (strike.twist - gaitTwist) * fight;
+    const yaw = this._stalk * squared + gaitTwist + (-this._strikeSide * strike.twist - gaitTwist) * fight;
 
     // Legs swing about true vertical under the leaning trunk, and the lowest
     // sole sets the body's height — the bake's lockFeetToFloor.
@@ -313,14 +315,17 @@ export class Enemy {
       side.ankle.rotation.x = ankle;
       lowest = Math.min(lowest, soleHeight(-legAhead, legOut, knee, ankle));
 
-      // Arms hang under gravity rather than tipping with the trunk, and swing
-      // against this side's leg.
-      const armSwing = -swing * uf;
-      let shoulder = -(g.armSwing * armSwing + g.armBias * reach) - lean;
-      let elbow = Math.max(0, REST_ELBOW + (g.elbow - REST_ELBOW) * reach + g.elbowSwing * armSwing);
+      // The shamble drags one arm and leaves both hands reaching ahead.
+      const armSwing = -swing * uf * (side.sign > 0 ? 0.55 : 1);
+      let shoulder = -(g.armSwing * armSwing + g.armBias * reach) - lean -
+        0.16 * reach - 0.18 * standing;
+      let elbow = Math.max(0, REST_ELBOW + (g.elbow - REST_ELBOW) * reach +
+        g.elbowSwing * armSwing + 0.22 * reach + 0.28 * standing);
       let out = ARM_OUT;
-      // The right arm throws the strike; the left comes up to guard.
-      const pose = side.sign < 0 ? strike : GUARD;
+      shoulder += (GUARD.shoulder - shoulder) * this._guard;
+      elbow += (GUARD.elbow - elbow) * this._guard;
+      out += (GUARD.roll - out) * this._guard;
+      const pose = side.sign === this._strikeSide ? strike : GUARD;
       shoulder += (pose.shoulder - shoulder) * fight;
       elbow += (pose.elbow - elbow) * fight;
       out += (pose.roll - out) * fight;
@@ -348,14 +353,13 @@ export class Enemy {
       hipZ * cosYaw - hipX * sinYaw - recoil * 0.22,
     );
 
-    // The head holds its stare on the player through the stalk, the lean and
-    // the punch; only a flinch or the fall snaps it back.
+    // The head holds its stare on the player through the stalk, lean and scratch.
     const head = this.joints.head;
     head.position.y = this._headY + breath * 0.006;
     head.rotation.set(
       -HEAD_HOLD * lean - 0.3 * recoil - 0.35 * fall,
       -yaw + 0.05 * Math.sin(this._idle * 0.37) * standing,
-      -HEAD_HOLD * roll,
+      -HEAD_HOLD * roll + (0.1 + 0.06 * Math.sin(this._idle * 0.7 + this.id)) * standing,
     );
   }
 
@@ -389,17 +393,15 @@ export class Enemy {
     return this._gait;
   }
 
-  // The strike pose for the current AI beat: chambering through the windup,
-  // driving out through the strike. Otherwise it holds wherever it got to while
-  // the fight weight lets it go, so a hit mid-windup doesn't snap the arm out.
+  // Chamber through windup, slash through the strike, then ease out of the pose.
   _strikePose() {
     const pose = this._strike;
     if (this.aiState === 'windup') {
       const t = Math.min(this._aiTimer / WINDUP_DURATION, 1);
-      mixPose(pose, REST_POSE, CHAMBER, 1 - (1 - t) ** 2);
+      mixPose(pose, REST_POSE, SCRATCH_CHAMBER, 1 - (1 - t) ** 2);
     } else if (this.aiState === 'strike') {
       const t = Math.min(this._aiTimer / STRIKE_DURATION, 1);
-      mixPose(pose, CHAMBER, EXTEND, 1 - (1 - t) ** 3);
+      mixPose(pose, SCRATCH_CHAMBER, SCRATCH_EXTEND, 1 - (1 - t) ** 3);
     }
     return pose;
   }
@@ -439,6 +441,8 @@ export class Enemy {
         this._aiTimer += dt;
         const distance = this._moveToward(player.root.position, dt, this.attackRange - ARRIVE_MARGIN);
         if (distance <= this.attackRange) {
+          this._strikeSide = this._nextStrikeSide;
+          this._nextStrikeSide *= -1;
           this.aiState = 'windup';
           this._aiTimer = 0;
         } else if (this._aiTimer >= APPROACH_TIMEOUT) {
@@ -583,6 +587,9 @@ export class Enemy {
     this._turnRate = 0;
     this._stalk = 0;
     this._fight = 0;
+    this._guard = 0;
+    this._strikeSide = this.id % 2 ? -1 : 1;
+    this._nextStrikeSide = this._strikeSide;
     this._lastPosition.copy(this.root.position);
     this._lastYaw = this.root.rotation.y;
     this._animate(0); // stand up now: the respawn renders before the next update

@@ -9,11 +9,12 @@ import * as THREE from 'three';
 export const STATE = {
   IDLE: 'idle', WALK: 'walk', WALK_BACK: 'walkBack', RUN: 'run', CARRY: 'carry',
   CARRY_OVERHEAD: 'carryOverhead', CARRY_OVERHEAD_IDLE: 'carryOverheadIdle',
+  COMBAT_IDLE: 'combatIdle',
 };
 
 // States whose clip is a standing pose, so playback runs at authored speed
 // instead of being scaled by ground speed.
-const STILL_STATES = new Set([STATE.IDLE, STATE.CARRY_OVERHEAD_IDLE]);
+const STILL_STATES = new Set([STATE.IDLE, STATE.COMBAT_IDLE, STATE.CARRY_OVERHEAD_IDLE]);
 
 // State -> clip name fragments, matched case-insensitively as a substring and
 // tried in order, so a neutral "Idle_No_Loop" wins over "Carry_Overhead_Idle".
@@ -22,6 +23,7 @@ const STILL_STATES = new Set([STATE.IDLE, STATE.CARRY_OVERHEAD_IDLE]);
 // "carry_overhead_loop", so the parked clip and the authored one can't cross-bind.
 const CLIP_NAMES = {
   [STATE.IDLE]: ['idle_no', 'idle', 'breath'],
+  [STATE.COMBAT_IDLE]: ['combat_idle'],
   [STATE.WALK]: ['walk'],
   // Longer fragment, so plain 'walk' can't shadow it and it can't steal 'walk'.
   // No such clip ships today — WALK_BACK falls back to the forward walk played
@@ -37,6 +39,7 @@ const CLIP_NAMES = {
 // single locomotion clip still animates all movement.
 const CLIP_FALLBACK = {
   [STATE.IDLE]: [],
+  [STATE.COMBAT_IDLE]: [STATE.IDLE],
   [STATE.WALK]: [STATE.RUN, STATE.IDLE],
   [STATE.WALK_BACK]: [STATE.WALK, STATE.RUN, STATE.IDLE],
   [STATE.RUN]: [STATE.WALK, STATE.IDLE],
@@ -53,7 +56,12 @@ const CLIP_FALLBACK = {
 // the carry clips.
 const ACTIONS = {
   punch: ['melee_hook', 'punch'],
+  punchRecovery: ['melee_hook_rec'],
   throw: ['throw_overhead', 'throw', 'overhand'],
+};
+
+const REACTIONS = {
+  hit: ['hit_knockback'],
 };
 
 // Jump is a 3-phase clip sequence layered over the vertical physics in Player.
@@ -69,23 +77,26 @@ const FADE = 0.2;        // locomotion <-> locomotion
 const FADE_FAST = 0.12;  // jump phase transitions
 const FADE_ACTION = 0.1; // one-shot actions
 
-// Drives a character's AnimationMixer from high-level intent: locomotion state,
-// one-shot actions (punch), and a jump sequence. Owns all clip/action bookkeeping
-// so Player can stay about movement.
+// Drives a character's AnimationMixer from high-level intent: locomotion,
+// one-shot actions and reactions, and a jump sequence.
 //
 // Override priority (what suspends locomotion):
 //   airborne (jump start/air) — locked; only landing ends it.
-//   action   (punch)          — locked until the clip finishes.
+//   reaction (hit)            — interrupts an action until the clip finishes.
+//   action   (punch/throw)    — locked until the clip finishes.
 //   landing  (jump land)      — a flourish; movement or a new action cancels it.
 export class AnimationController {
   constructor(model, clips) {
     this.mixer = new THREE.AnimationMixer(model);
     this.actions = {};   // STATE -> looping AnimationAction
     this.oneShots = {};  // action name -> AnimationAction
+    this.reactions = {}; // reaction name -> AnimationAction
     this.jump = {};      // phase -> AnimationAction
     this.current = null; // locomotion AnimationAction currently playing
 
-    this._action = null;     // blocking one-shot (punch)
+    this._action = null;     // blocking one-shot action
+    this._reaction = null;  // interrupting one-shot (hit)
+    this._recovery = null;  // cancelable return from a punch
     this._airborne = false;  // jump start/air phases
     this._landing = false;   // jump land phase (interruptible)
     this._jumpPhase = null;  // 'start' | 'air' | 'land'
@@ -93,6 +104,7 @@ export class AnimationController {
 
     bind(clips, CLIP_NAMES, (state, action) => { this.actions[state] = action; }, this.mixer);
     bind(clips, ACTIONS, (name, action) => { this.oneShots[name] = action; }, this.mixer);
+    bind(clips, REACTIONS, (name, action) => { this.reactions[name] = action; }, this.mixer);
     bind(clips, JUMP_CLIPS, (phase, action) => { this.jump[phase] = action; }, this.mixer);
 
     this._onFinished = this._onFinished.bind(this);
@@ -105,8 +117,8 @@ export class AnimationController {
   // True while the character is in the air — Player uses this to keep air control
   // but suspend ground-only actions.
   get airborne() { return this._airborne; }
-  // True during a blocking one-shot (punch) — Player roots movement while it plays.
-  get acting() { return !!this._action; }
+  // True during a blocking action or hit reaction — Player roots movement while it plays.
+  get acting() { return !!this._action || !!this._reaction; }
 
   update(dt) { this.mixer.update(dt); }
 
@@ -115,14 +127,23 @@ export class AnimationController {
   // finish. `speedFactor` is ground speed over the speed the state's clip was
   // authored for (so ~1 at that speed), scaling playback so feet don't skate.
   setLocomotion(state, speedFactor = 1) {
-    if (this._airborne || this._action) return;
+    if (this._airborne || this._action || this._reaction) return;
+    if (this._recovery) {
+      if (STILL_STATES.has(state)) return;
+      this._endRecovery();
+    }
     if (this._landing) {
-      if (state === STATE.IDLE) return; // let the land flourish play out
+      if (STILL_STATES.has(state)) return; // let the land flourish play out
       this._endLanding();               // moving out of a landing cancels it
     }
     const next = this._resolve(state);
     if (next && next !== this.current) {
+      const strideTransition = (next === this.actions[STATE.WALK] || next === this.actions[STATE.RUN]) &&
+        (this.current === this.actions[STATE.WALK] || this.current === this.actions[STATE.RUN]);
+      const phase = strideTransition && this.current
+        ? this.current.time / this.current.getClip().duration : 0;
       next.reset().fadeIn(FADE).play();
+      next.time = phase * next.getClip().duration;
       if (this.current) this.current.fadeOut(FADE);
       this.current = next;
     }
@@ -133,21 +154,22 @@ export class AnimationController {
       const dir = state === STATE.WALK_BACK && !this.actions[state] ? -1 : 1;
       this.current.timeScale = STILL_STATES.has(state)
         ? 1
-        : dir * THREE.MathUtils.clamp(speedFactor, 0.6, 2.2);
+        : dir * THREE.MathUtils.clamp(speedFactor, 0.05, 2.2);
     }
   }
 
   // Play a one-shot action once (e.g. 'punch'). Returns false if it can't (no clip,
-  // airborne, or already mid-action). Cancels a landing flourish if one is playing.
-  // `timeScale` retimes a library clip to the beat Player's action profile expects.
-  playAction(name, timeScale = 1) {
+  // airborne, or already acting). Cancels a landing flourish if one is playing.
+  // Optional duration keeps the visual action on Player's gameplay clock.
+  playAction(name, duration) {
     const action = this.oneShots[name];
-    if (!action || this._airborne || this._action) return false;
+    if (!action || this._airborne || this._action || this._reaction) return false;
+    this._endRecovery();
     if (this._landing) this._endLanding();
     action.reset();
     action.setLoop(THREE.LoopOnce, 1);
     action.clampWhenFinished = true; // hold the final pose while it fades out
-    action.timeScale = timeScale;
+    action.timeScale = duration === undefined ? 1 : action.getClip().duration / duration;
     action.fadeIn(FADE_ACTION).play();
     if (this.current) this.current.fadeOut(FADE_ACTION);
     this.current = null; // setLocomotion re-crossfades once the action ends
@@ -155,13 +177,39 @@ export class AnimationController {
     return true;
   }
 
+  // Cancellation also applies when a model is missing the reaction clip.
+  playReaction(name, duration) {
+    if (this._airborne) return false;
+    this._endRecovery();
+    if (this._action) {
+      this._action.fadeOut(FADE_ACTION);
+      this._action = null;
+    }
+    if (this._reaction) this._reaction.fadeOut(FADE_ACTION);
+    this._reaction = null;
+    if (this._landing) this._endLanding();
+    const action = this.reactions[name];
+    if (!action) return false;
+    action.reset();
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    action.timeScale = action.getClip().duration / duration;
+    action.fadeIn(FADE_ACTION).play();
+    if (this.current) this.current.fadeOut(FADE_ACTION);
+    this.current = null;
+    this._reaction = action;
+    return true;
+  }
+
   // Called by Player's physics when the character leaves the ground.
   jumpTakeoff() {
+    this._endRecovery();
     this._airborne = true;
     this._landing = false;
     if (this.current) this.current.fadeOut(FADE_FAST);
     this.current = null;
     if (this._action) { this._action.fadeOut(FADE_FAST); this._action = null; }
+    if (this._reaction) { this._reaction.fadeOut(FADE_FAST); this._reaction = null; }
     this._playJump(this.jump.start ? 'start' : 'air');
   }
 
@@ -173,6 +221,19 @@ export class AnimationController {
     else this._endLanding();
   }
 
+  reset() {
+    this.mixer.stopAllAction();
+    this._action = null;
+    this._reaction = null;
+    this._recovery = null;
+    this._airborne = false;
+    this._landing = false;
+    this._jumpPhase = null;
+    this._jumpAction = null;
+    this.current = null;
+    this.setLocomotion(STATE.IDLE);
+  }
+
   dispose() {
     this.mixer.removeEventListener('finished', this._onFinished);
     this.mixer.stopAllAction();
@@ -181,10 +242,27 @@ export class AnimationController {
 
   // -- internals --------------------------------------------------------------
   _onFinished(e) {
+    if (e.action === this._recovery) {
+      this._endRecovery();
+      return;
+    }
+    if (e.action === this._reaction) {
+      this._reaction.fadeOut(FADE_ACTION);
+      this._reaction = null;
+      this.current = null;
+      return;
+    }
     if (e.action === this._action) {
       this._action.fadeOut(FADE_ACTION);
       this._action = null;
       this.current = null; // setLocomotion re-crossfades next frame
+      if (e.action === this.oneShots.punch && this.oneShots.punchRecovery) {
+        const recovery = this.oneShots.punchRecovery;
+        recovery.reset().setLoop(THREE.LoopOnce, 1);
+        recovery.clampWhenFinished = true;
+        recovery.fadeIn(FADE_ACTION).play();
+        this._recovery = recovery;
+      }
       return;
     }
     if (e.action === this.jump.start && this._jumpPhase === 'start' && this._airborne) {
@@ -192,6 +270,13 @@ export class AnimationController {
     } else if (e.action === this.jump.land && this._jumpPhase === 'land') {
       this._endLanding();
     }
+  }
+
+  _endRecovery() {
+    if (!this._recovery) return;
+    this._recovery.fadeOut(FADE_ACTION);
+    this._recovery = null;
+    this.current = null;
   }
 
   _endLanding() {
@@ -238,7 +323,8 @@ function bind(clips, table, assign, mixer) {
 // earlier fragment ("idle_no") wins over a later one ("idle") even if both match.
 function findClip(clips, fragments) {
   for (const f of fragments) {
-    const hit = clips.find((c) => c.name.toLowerCase().includes(f));
+    const hit = clips.find((c) => c.name.toLowerCase() === f) ??
+      clips.find((c) => c.name.toLowerCase().includes(f));
     if (hit) return hit;
   }
   return null;

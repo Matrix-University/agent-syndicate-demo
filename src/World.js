@@ -41,10 +41,38 @@ function garageHalfWidthAt(z) {
 
 // Resolves the player against static garage geometry as a circle on the ground.
 export class World {
-  constructor(root, colliders) {
+  constructor(root, colliders, parkedCars = []) {
     this.root = root;
     this.colliders = colliders;
+    this.parkedCars = parkedCars;
     this.disposed = false;
+  }
+
+  claimNearestParkedCar(position) {
+    let nearest = null;
+    let nearestDistanceSq = Infinity;
+    for (const car of this.parkedCars) {
+      if (car.claimed || !car.model) continue;
+      const distanceSq = (car.x - position.x) ** 2 + (car.z - position.z) ** 2;
+      if (distanceSq < nearestDistanceSq) {
+        nearest = car;
+        nearestDistanceSq = distanceSq;
+      }
+    }
+    if (nearest) {
+      nearest.claimed = true;
+      nearest.root.visible = false;
+      nearest.collider.disabled = true;
+    }
+    return nearest;
+  }
+
+  resetParkedCars() {
+    for (const car of this.parkedCars) {
+      car.claimed = false;
+      if (car.root) car.root.visible = true;
+      car.collider.disabled = false;
+    }
   }
 
   // Dynamic colliders (a liftable car) register here and mutate their own entry —
@@ -335,7 +363,8 @@ async function addParkedCars(scene, slots, world) {
     if (world.disposed) {
       models.forEach((model) => disposeObject(model.scene));
     } else {
-      slots.forEach(([x, z, yaw], index) => {
+      slots.forEach((slot, index) => {
+        const { x, z, yaw } = slot;
         const car = models[(index * 2 + 1) % models.length].scene.clone(true);
         car.scale.setScalar(1.65);
         car.traverse((object) => {
@@ -354,6 +383,8 @@ async function addParkedCars(scene, slots, world) {
         parkingSpot.rotation.y = yaw ?? (x < 0 ? Math.PI / 2 : -Math.PI / 2);
         parkingSpot.add(car);
         scene.add(parkingSpot);
+        slot.root = parkingSpot;
+        slot.model = car;
       });
     }
   } catch (error) {
@@ -601,19 +632,24 @@ export function buildWorld(scene) {
     [29, 4], [29, 12], [29, 20], [29, 28], [29, 36], [29, 44],
     [-6.5, -28, 0], [6.5, 0, 0], [-6.5, 28, 0],
   ];
-  parkedCars.forEach(([x, z, yaw]) => {
+  const parkedCarEntries = parkedCars.map(([x, z, yaw]) => {
     const isLongitudinal = yaw === 0;
-    colliders.push({
+    const collider = {
       x,
       z,
       hx: isLongitudinal ? 1.45 : 2.3,
       hz: isLongitudinal ? 2.3 : 1.45,
       height: 1.65,
-    });
+    };
+    colliders.push(collider);
+    return {
+      x, z, yaw: yaw ?? (x < 0 ? Math.PI / 2 : -Math.PI / 2),
+      collider, root: null, model: null, claimed: false,
+    };
   });
-  const world = new World(root, colliders);
+  const world = new World(root, colliders, parkedCarEntries);
   world.cameraBounds = GARAGE_CAMERA_BOUNDS;
-  addParkedCars(scene, parkedCars, world);
+  addParkedCars(scene, parkedCarEntries, world);
 
   addCheckpoint(scene, concreteMaterial, darkConcreteMaterial, darkMetalMaterial);
   addQueueRopes(scene, redPaintMaterial, darkMetalMaterial);

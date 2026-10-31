@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CarSmoke } from './CarSmoke.js';
 
 const CAR_MODEL = '/models/vehicles/suv.glb';
 const CAR_SCALE = 1.65; // matches the parked cars in World.js
@@ -43,12 +44,14 @@ const WALL_BOUNCE = -0.22;
 
 const IMPACT_RADIUS = 3.2;
 const IMPACT_DAMAGE = 3;  // an Enemy's full health — a thrown car is not a jab
+const DESTROYED_DAMAGE_LEVEL = 3;
 
 // A single car the player can lift overhead and throw. It owns its own world
 // collider (registered with World) and toggles it off while held or airborne, so
 // the thing you are carrying can't also be the thing you walk into.
 //
-// States: grounded (liftable) -> carried -> flying -> settling -> grounded.
+// The third landing destroys it; only then does an unused parked car take over.
+// States: grounded -> carried -> flying -> settling -> grounded / destroyed.
 export class LiftableCar {
   constructor(scene, world, opts = {}) {
     this.root = new THREE.Group();
@@ -65,6 +68,11 @@ export class LiftableCar {
     this.damageLevel = 0;
     this._landingImpactPending = false;
     this._modelBaseY = 0;
+    this._initialModel = null;
+    this._initialModelBaseY = 0;
+    this._wrecks = [];
+    this._destroyedTreatments = [];
+    this._smoke = new CarSmoke(scene);
 
     this.home = new THREE.Vector3(opts.x ?? 0, 0, opts.z ?? 0);
     this.homeYaw = opts.yaw ?? 0;
@@ -97,6 +105,7 @@ export class LiftableCar {
   get liftable() { return this.state === 'grounded' && !!this.model; }
   get carried() { return this.state === 'carried'; }
   get flying() { return this.state === 'flying'; }
+  get destroyed() { return this.state === 'destroyed'; }
 
   // Close enough, on the ground, and not already holding something.
   canLift(player) {
@@ -160,16 +169,28 @@ export class LiftableCar {
   }
 
   update(dt, world, player) {
+    this._smoke.update(dt);
     switch (this.state) {
       case 'carried': this._updateCarry(dt); break;
       case 'flying': this._updateFlight(dt, world); break;
       case 'settling': this._updateSettle(dt); break;
+      case 'destroyed': this._replaceDestroyedCar(); break;
       default: this._updateMarker(dt, player); break;
     }
   }
 
   reset() {
     if (this.root.parent !== this._scene) this._scene.attach(this.root);
+    this._clearWrecks();
+    this._clearDestroyedTreatments();
+    this._smoke.reset();
+    this._world.resetParkedCars?.();
+    if (this._initialModel) {
+      this.model?.removeFromParent();
+      this.model = this._initialModel;
+      this._modelBaseY = this._initialModelBaseY;
+      this.root.add(this.model);
+    }
     this.state = 'grounded';
     this.velocity.set(0, 0, 0);
     this._struck.clear();
@@ -187,8 +208,13 @@ export class LiftableCar {
     if (this._disposed) return;
     this._disposed = true;
     this._world.removeCollider(this.collider);
+    this._clearWrecks();
+    this._clearDestroyedTreatments();
+    this._smoke.dispose();
+    this._world.resetParkedCars?.();
     this.root.removeFromParent();
-    disposeObject(this.root);
+    // Replacement models and wrecks borrow the parked fleet's GPU resources.
+    if (this._initialModel) disposeObject(this._initialModel);
     this._marker.removeFromParent();
     this._marker.geometry.dispose();
     this._marker.material.dispose();
@@ -224,6 +250,8 @@ export class LiftableCar {
     this.root.add(model);
     this.model = model;
     this._modelBaseY = model.position.y;
+    this._initialModel = model;
+    this._initialModelBaseY = this._modelBaseY;
     this._applyDamage();
   }
 
@@ -276,8 +304,12 @@ export class LiftableCar {
     this.state = 'settling';
     // Combat runs after physics, so retain the final flight sweep across this transition.
     this._landingImpactPending = true;
-    this.damageLevel = Math.min(3, this.damageLevel + 1);
+    this.damageLevel = Math.min(DESTROYED_DAMAGE_LEVEL, this.damageLevel + 1);
     this._applyDamage();
+    if (this.damageLevel === DESTROYED_DAMAGE_LEVEL) {
+      this._applyDestroyedTreatment();
+      this._smoke.play(this.root.position);
+    }
     this._settleTime = 0;
     this._liftFromQuaternion.copy(this.root.quaternion);
     // Keep the yaw it crashed at, drop the tumble.
@@ -288,10 +320,42 @@ export class LiftableCar {
 
   _applyDamage() {
     if (!this.model) return;
-    // The crumpled silhouette persists between throws, but never disables pickup.
+    // Damage persists until this car is destroyed, not reset on pickup.
     const compression = 1 - this.damageLevel * 0.07;
     this.model.scale.y = CAR_SCALE * compression;
     this.model.position.y = this._modelBaseY * compression;
+  }
+
+  _applyDestroyedTreatment() {
+    if (!this.model) return;
+    const originals = new Map();
+    const materials = new Map();
+    const scorch = (original) => {
+      if (materials.has(original)) return materials.get(original);
+      const material = original.clone();
+      material.color?.multiplyScalar(0.28);
+      material.emissive?.setHex(0x000000);
+      if ('roughness' in material) material.roughness = 1;
+      if ('metalness' in material) material.metalness = 0.15;
+      materials.set(original, material);
+      return material;
+    };
+    // Parked models share materials: only the wreck gets the scorched clones.
+    this.model.traverse((object) => {
+      if (!object.isMesh) return;
+      originals.set(object, object.material);
+      object.material = Array.isArray(object.material)
+        ? object.material.map(scorch) : scorch(object.material);
+    });
+    this._destroyedTreatments.push({ originals, materials });
+  }
+
+  _clearDestroyedTreatments() {
+    for (const treatment of this._destroyedTreatments) {
+      for (const [mesh, material] of treatment.originals) mesh.material = material;
+      for (const material of treatment.materials.values()) material.dispose();
+    }
+    this._destroyedTreatments.length = 0;
   }
 
   _updateSettle(dt) {
@@ -302,10 +366,46 @@ export class LiftableCar {
     );
     if (this._settleTime < SETTLE_DURATION) return;
 
-    this.state = 'grounded';
+    this.state = this.damageLevel >= DESTROYED_DAMAGE_LEVEL ? 'destroyed' : 'grounded';
     this.collider.disabled = false;
     this._syncCollider();
+    this._marker.visible = !this.destroyed;
+  }
+
+  _replaceDestroyedCar() {
+    const replacement = this._world.claimNearestParkedCar?.(this.root.position);
+    if (!replacement) return;
+
+    const wreck = new THREE.Group();
+    wreck.name = 'destroyed-car';
+    wreck.position.copy(this.root.position);
+    wreck.quaternion.copy(this.root.quaternion);
+    wreck.add(this.model);
+    this._scene.add(wreck);
+    const collider = { ...this.collider };
+    this._world.addCollider(collider);
+    this._wrecks.push({ root: wreck, collider });
+
+    this.model = replacement.model.clone(true);
+    this.root.add(this.model);
+    this._modelBaseY = this.model.position.y;
+    this.damageLevel = 0;
+    this.state = 'grounded';
+    this._struck.clear();
+    this._landingImpactPending = false;
+    this.root.position.set(replacement.x, 0, replacement.z);
+    this.root.rotation.set(0, replacement.yaw, 0);
+    this._syncCollider();
     this._marker.visible = true;
+    this._updateMarker(0, null);
+  }
+
+  _clearWrecks() {
+    for (const wreck of this._wrecks) {
+      wreck.root.removeFromParent();
+      this._world.removeCollider(wreck.collider);
+    }
+    this._wrecks.length = 0;
   }
 
   // Pulse the pickup ring only when the player is actually in range, so it reads

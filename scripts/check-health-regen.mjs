@@ -73,13 +73,15 @@ try {
   console.log('PASS: accepted damage resets both waits; rejected damage does not');
 
   hurt();
-  player.regenerateHealth(209.75);
+  step(0.25); // Let the new hit reaction finish before testing an action.
+  player.regenerateHealth(209.5);
   input.punchPressed = true;
   step(0.25);
   input.punchPressed = false;
   assert.equal(player.health, 17.5, 'attacking does not interrupt regeneration');
   hurt();
-  player.regenerateHealth(209.75);
+  step(0.25);
+  player.regenerateHealth(209.5);
   input.jumpPressed = true;
   step(0.25);
   input.jumpPressed = false;
